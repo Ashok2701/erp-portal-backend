@@ -123,5 +123,15 @@ exports.getActiveModules = async () => {
   return result.rows;
 };
 
+exports.getAllModules = async () => {
+  const result = await pool.query(`
+    SELECT *
+    FROM modules
+    ORDER BY module_name
+  `);
+
+  return result.rows;
+};
+
 
 

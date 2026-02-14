@@ -32,7 +32,7 @@ exports.createModule = async (req, res) => {
 
 exports.getAllModules = async (req, res) => {
   try {
-    const modules = await ModuleModel.getActiveModules();
+    const modules = await ModuleModel.getAllModules();
     res.json(modules);
   } catch (err) {
     console.error("GET MODULES ERROR:", err);
