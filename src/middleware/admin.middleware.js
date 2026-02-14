@@ -6,9 +6,11 @@ module.exports = async (req, res, next) => {
 
     const roles = await RoleModel.getRolesByUserId(user_id);
 
-    if (!roles.includes("ADMIN")) {
-      return res.status(403).json({ message: "Access denied. Admin only." });
-    }
+  if (!roles.includes("ADMIN") && !roles.includes("Administrator")) {
+       return res.status(403).json({
+         message: "Access denied. Admin only."
+       });
+     }
 
     next();
   } catch (err) {
