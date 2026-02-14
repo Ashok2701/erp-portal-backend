@@ -23,7 +23,7 @@ exports.login = async (req, res) => {
     return res.status(401).json({message : "Invalid credentails"});
  }
 
-
+const roles = await RoleModel.getRolesByUserId(user.user_id);
  const expiresIn = process.env.JWT_EXPIRES_IN || "8h";
 
  const token = jwt.sign({
@@ -36,7 +36,14 @@ exports.login = async (req, res) => {
 
 );
 
-res.json({token});
+res.json({token,  user: {
+                     user_id: user.user_id,
+                     tenant_id: user.tenant_id,
+                     username: user.username,
+                     roles
+
+                   }
+                   });
 }
 
 
