@@ -14,6 +14,7 @@ app.use(express.json());
 app.use("/auth", authRoutes); 
 app.use("/admin", adminRoutes);
 app.use("/sales-requests", salesRequestRoutes);
+app.use("/modules", require("./routes/module.routes"));
 
 
 
