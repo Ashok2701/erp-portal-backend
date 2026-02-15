@@ -66,11 +66,12 @@ exports.updateRole = async (role_id, data) => {
     `
     UPDATE roles
     SET role_name = $1,
-        is_active = $2
-    WHERE role_id = $3
+        is_active = $2,
+        description = $3
+    WHERE role_id = $4
     RETURNING *
     `,
-    [role_name, is_active, role_id]
+    [role_name, is_active, description, role_id]
   );
 
   return result.rows[0];
