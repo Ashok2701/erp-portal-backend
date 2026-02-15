@@ -15,6 +15,7 @@ app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use("/sales-requests", salesRequestRoutes);
 app.use("/modules", require("./routes/module.routes"));
+app.use("/roles", require("./routes/role.routes"));
 
 
 
