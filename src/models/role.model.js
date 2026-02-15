@@ -18,7 +18,7 @@ exports.getRolesByUserId = async (userId) => {
 }
 
 exports.createRole = async (data) => {
-  const { role_code, role_name } = data;
+  const { role_code, role_name, description } = data;
 
   const result = await pool.query(
     `
@@ -32,7 +32,7 @@ exports.createRole = async (data) => {
     VALUES ($1, $2, $3, $4, true)
     RETURNING *
     `,
-    [uuidv4(), role_code.toUpperCase(), role_name, role_description]
+    [uuidv4(), role_code.toUpperCase(), role_name, description]
   );
 
   return result.rows[0];
