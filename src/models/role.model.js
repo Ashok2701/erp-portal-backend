@@ -60,7 +60,7 @@ exports.getActiveRoles = async () => {
 };
 
 exports.updateRole = async (role_id, data) => {
-  const { role_name, is_active } = data;
+  const { role_name, is_active, description } = data;
 
   const result = await pool.query(
     `
