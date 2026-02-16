@@ -5,6 +5,7 @@ const cors = require("cors");
 const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
 const salesRequestRoutes = require("./routes/salesRequest.routes");
+const roleModuleRoutes = require("./routes/roleModule.routes");
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.use("/admin", adminRoutes);
 app.use("/sales-requests", salesRequestRoutes);
 app.use("/modules", require("./routes/module.routes"));
 app.use("/roles", require("./routes/role.routes"));
+app.use("/role-modules", roleModuleRoutes);
 
 
 
