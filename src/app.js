@@ -18,7 +18,7 @@ app.use("/sales-requests", salesRequestRoutes);
 app.use("/modules", require("./routes/module.routes"));
 app.use("/roles", require("./routes/role.routes"));
 app.use("/role-modules", roleModuleRoutes);
-
+app.use("/erp", require("./routes/erp.routes"));
 
 
 module.exports = app;
