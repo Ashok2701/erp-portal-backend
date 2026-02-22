@@ -2,80 +2,68 @@ const { getErpDbPool } = require("../erpDbManager");
 
 /* Customers */
 exports.getCustomers = async (conn) => {
-  const pool = getErpDbPool(conn);
-  const result = await pool.query(`
+  const pool = await getErpDbPool(conn);
+
+  const result = await pool.request().query(`
     SELECT
       BPCNUM_0 AS customer_code,
       BPCNAM_0 AS customer_name,
-      CRN AS currency
+      CUR_0 AS currency
     FROM TMSNEW.BPCUSTOMER
 
   `);
-  return result.rows;
+
+  return result.recordset;
 };
 
 /* Suppliers */
 exports.getSuppliers = async (conn) => {
-  const pool = getErpDbPool(conn);
-  const result = await pool.query(`
+  const pool = await getErpDbPool(conn);
+
+  const result = await pool.request().query(`
     SELECT
       BPSNUM_0 AS supplier_code,
       BPSNAM_0 AS supplier_name
     FROM TMSNEW.BPSUPPLIER
-    WHERE BPSSTA = 2
+
   `);
-  return result.rows;
+
+  return result.recordset;
 };
 
 /* Products */
 exports.getProducts = async (conn) => {
-  const pool = getErpDbPool(conn);
-  const result = await pool.query(`
+  const pool = await getErpDbPool(conn);
+
+  const result = await pool.request().query(`
     SELECT
       ITMREF_0 AS product_code,
       ITMDES_0 AS product_name,
       STU AS uom
     FROM TMSNEW.ITMMASTER
-    WHERE ITMSTA = 1
+
   `);
-  return result.rows;
+
+  return result.recordset;
 };
 
 /* Customer Addresses */
 exports.getCustomerAddresses = async (conn, customerCode) => {
-  const pool = getErpDbPool(conn);
-  const result = await pool.query(
-    `
+  const pool = await getErpDbPool(conn);
+
+  const request = pool.request();
+  request.input("customerCode", customerCode);
+
+  const result = await request.query(`
     SELECT
-      ADRNUM AS address_code,
-      ADRNAM AS address_name,
-      CTY AS city,
-      POSCOD AS postal_code,
-      CRY AS country
+      BPAADD_0 AS address_code,
+      BPAADDLIG_0 AS address_name,
+      CTY_0 AS city,
+      POSCOD_0 AS postal_code,
+      CRY_0 AS country
     FROM TMSNEW.BPADDRESS
-    WHERE BPACOD = $1
-    `,
-    [customerCode]
-  );
-  return result.rows;
-};
+    WHERE BPANUM_0 = @customerCode
+  `);
 
-/* Dashboard */
-exports.getDashboardData = async (conn, erpEntityCode) => {
-  const pool = getErpDbPool(conn);
-
-  const orders = await pool.query(
-    `SELECT COUNT(*) FROM TMSNEW.SORDER WHERE BPCORD = $1`,
-    [erpEntityCode]
-  );
-
-  const invoices = await pool.query(
-    `SELECT COUNT(*) FROM TMSNEW.SINVOICE WHERE BPCINV = $1 AND PAYSTA <> 'PAID'`,
-    [erpEntityCode]
-  );
-
-  return {
-    total_orders: Number(orders.rows[0].count),
-    open_invoices: Number(invoices.rows[0].count)
-  };
+  return result.recordset;
 };
