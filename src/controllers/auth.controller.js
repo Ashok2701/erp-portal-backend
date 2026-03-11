@@ -21,8 +21,16 @@ if(!user) {
     return res.status(401).json({message : "User is inactive"});
  }
 
+ console.log("user is", username)
+ console.log("passwrod from body", password);
+  console.log("passwrod from body", user.password_hash);
+ console.log("password after bcrpt", bcrypt(password))
+
 
  const isValid = await bcrypt.compare(password, user.password_hash);
+
+ console.log("passwrod valid", isValid);
+
 
  if(!isValid) {
     return res.status(401).json({message : "Invalid credentails"});
