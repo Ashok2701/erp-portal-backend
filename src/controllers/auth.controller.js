@@ -12,8 +12,13 @@ exports.login = async (req, res) => {
 
  const user = await UserModel.findByUsername(username)
 
- if(!user || !user.is_active) {
-    return res.status(401).json({message : "Invalid credentails"});
+if(!user) {
+    return res.status(401).json({message : "User doesn't exist"});
+ }
+
+
+ if(!user.is_active) {
+    return res.status(401).json({message : "User is inactive"});
  }
 
 
