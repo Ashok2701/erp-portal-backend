@@ -24,8 +24,8 @@ if(!user) {
  console.log("user is", username)
  console.log("passwrod from body", password);
   console.log("passwrod from body", user.password_hash);
- console.log("password after bcrpt", bcrypt(password))
-
+ //console.log("password after bcrpt", bcrypt(password))
+bcrypt.hash("Password@123",10).then(console.log);
 
  const isValid = await bcrypt.compare(password, user.password_hash);
 
