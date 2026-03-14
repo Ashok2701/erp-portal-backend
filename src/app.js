@@ -6,7 +6,7 @@ const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
 const salesRequestRoutes = require("./routes/salesRequest.routes");
 const roleModuleRoutes = require("./routes/roleModule.routes");
-const chatRoutes = require('./routes/chat.routes');
+const chatRoutes = require("./routes/chat.routes");
 
 const app = express();
 
@@ -20,6 +20,6 @@ app.use("/modules", require("./routes/module.routes"));
 app.use("/roles", require("./routes/role.routes"));
 app.use("/role-modules", roleModuleRoutes);
 app.use("/erp", require("./routes/erp.routes"));
-app.use('/api/chat', chatRoutes);
+app.use("/api/chat", chatRoutes);
 
 module.exports = app;
