@@ -7,7 +7,7 @@
 // FILE 1: src/models/chat.model.js
 // ============================================================
 
-const { pool } = require('../config/database');
+const { pool } = require('../config/db');
 
 class ChatModel {
   // Create a new conversation

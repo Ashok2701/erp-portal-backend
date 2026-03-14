@@ -3,7 +3,7 @@
 // Executes actions returned by LLM
 // ============================================================
 
-const { pool } = require('../config/database');
+const { pool } = require('../config/db');
 
 class ActionExecutorService {
   constructor(userId, tenantId, userRole) {
