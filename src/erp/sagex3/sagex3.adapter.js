@@ -1,37 +1,40 @@
 const BaseERPAdapter = require("../base.adapter");
-const SageX3DB = require("./sagex3.db");
-const SageX3SOAP = require("./sagex3.soap");
 
 class SageX3Adapter extends BaseERPAdapter {
-  constructor(conn) {
-    super();
-    this.conn = conn;
-    this.mode = conn.connection_mode;
-  }
+    
 
-  getCustomers() {
-    return SageX3DB.getCustomers(this.conn);
-  }
+ async getCustomers(){
 
-  getSuppliers() {
-    return SageX3DB.getSuppliers(this.conn);
-  }
+      return this.getCustomersFromDB();
+ }
 
-  getProducts() {
-    return SageX3DB.getProducts(this.conn);
-  }
+ async getCustomersFromDB(){
 
-  getCustomerAddresses(code) {
-    return SageX3DB.getCustomerAddresses(this.conn, code);
-  }
+   const sql = require("mssql");
 
-  getDashboardData(context) {
-    return SageX3DB.getDashboardData(this.conn, context.erp_entity_code);
-  }
+   const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT)
+   };
 
-  createSalesOrder(orderData) {
-    return SageX3SOAP.createSalesOrder(this.conn, orderData);
-  }
+   const pool = await sql.connect(config);
+
+   const result = await pool.request().query(`
+     SELECT
+       BPCNUM AS customer_code,
+       BPCNAM AS customer_name
+     FROM BPCUSTOMER
+   `);
+
+   return result.recordset;
+
+ }
+
+
+
 }
 
 module.exports = SageX3Adapter;

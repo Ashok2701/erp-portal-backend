@@ -1,5 +1,6 @@
 const SageX3Adapter = require("./sagex3/sagex3.adapter");
 const ErpConnectionModel = require("../models/erpConnection.model");
+const SageAdapter = require("./adapters/sagex3.adapter");
 
 exports.getERPAdapterForUser = async (user) => {
   const conn = await ErpConnectionModel.getByTenant(user.tenant_id);
@@ -14,4 +15,17 @@ exports.getERPAdapterForUser = async (user) => {
     default:
       throw new Error("Unsupported ERP system");
   }
+};
+
+
+
+exports.getERPAdapter = () => {
+
+  const erp = process.env.ERP_SYSTEM;
+
+  if (erp === "SAGE_X3") {
+    return new SageAdapter();
+  }
+
+  throw new Error("Unsupported ERP");
 };

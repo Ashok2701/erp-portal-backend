@@ -1,46 +1,36 @@
-const { getERPAdapterForUser } = require("../erp/erp.factory");
+const erpService = require("../services/erp.service");
 
 exports.getCustomers = async (req, res) => {
-  try {
-    const adapter = await getERPAdapterForUser(req.user);
-    res.json(await adapter.getCustomers());
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+
+  const customers = await erpService.getCustomers();
+
+  res.json(customers);
 };
 
 exports.getSuppliers = async (req, res) => {
-  try {
-    const adapter = await getERPAdapterForUser(req.user);
-    res.json(await adapter.getSuppliers());
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+
+  const customers = await erpService.getCustomers();
+
+  res.json(customers);
 };
 
 exports.getProducts = async (req, res) => {
-  try {
-    const adapter = await getERPAdapterForUser(req.user);
-    res.json(await adapter.getProducts());
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+
+  const customers = await erpService.getCustomers();
+
+  res.json(customers);
 };
 
 exports.getCustomerAddresses = async (req, res) => {
-  try {
-    const adapter = await getERPAdapterForUser(req.user);
-    res.json(await adapter.getCustomerAddresses(req.params.code));
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+
+  const customers = await erpService.getCustomers();
+
+  res.json(customers);
 };
 
 exports.getDashboard = async (req, res) => {
-  try {
-    const adapter = await getERPAdapterForUser(req.user);
-    res.json(await adapter.getDashboardData(req.user));
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
+
+  const customers = await erpService.getCustomers();
+
+  res.json(customers);
 };

@@ -1,3 +1,5 @@
+const ERPFactory = require("../erp/erp.factory");
+
 exports.createSalesOrder = async (salesRequest) => {
   // 🔴 DEMO / MOCK IMPLEMENTATION
   // Later this will call Sage X3 API
@@ -12,4 +14,13 @@ exports.createSalesOrder = async (salesRequest) => {
 
   // To simulate failure, return:
   // return { success: false, error: "ERP timeout" };
+};
+
+
+
+exports.getCustomers = async () => {
+
+   const adapter = ERPFactory.getERPAdapter();
+
+   return adapter.getCustomers();
 };
