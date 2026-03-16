@@ -1,6 +1,6 @@
 const SageX3Adapter = require("./sagex3/sagex3.adapter");
 const ErpConnectionModel = require("../models/erpConnection.model");
-const SageAdapter = require("./adapters/sagex3.adapter");
+const SageAdapter = require("./sagex3/sagex3.adapter");
 
 exports.getERPAdapterForUser = async (user) => {
   const conn = await ErpConnectionModel.getByTenant(user.tenant_id);
