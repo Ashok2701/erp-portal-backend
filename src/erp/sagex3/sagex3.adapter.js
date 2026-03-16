@@ -17,7 +17,7 @@ class SageX3Adapter extends BaseERPAdapter {
      password: process.env.ERP_DB_PASSWORD,
      server: process.env.ERP_DB_HOST,
      database: process.env.ERP_DB_NAME,
-     port: parseInt(process.env.ERP_DB_PORT)
+     //port: parseInt(process.env.ERP_DB_PORT)
    };
 
    const pool = await sql.connect(config);
