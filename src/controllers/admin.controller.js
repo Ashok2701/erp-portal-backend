@@ -1,5 +1,6 @@
 const bcrypt = require("bcrypt");
 const UserModel = require("../models/user.model");
+const RoleModel= require("../models/role.model")
 const pool = require("../config/db");
 const UserErpMappingModel = require("../models/userErpMapping.model");
 
