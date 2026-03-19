@@ -141,8 +141,9 @@ exports.updateUser = async (req, res) => {
       role_code
     } = req.body;
 
+    
     // update user
-    await UserModel.updateser(id, {
+    await UserModel.updateUser(id, {
       full_name,
       email,
       contact_number,
