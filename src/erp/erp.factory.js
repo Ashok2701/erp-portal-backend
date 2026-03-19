@@ -18,7 +18,6 @@ exports.getERPAdapterForUser = async (user) => {
 };
 
 
-
 exports.getERPAdapter = () => {
 
   const erp = process.env.ERP_SYSTEM;

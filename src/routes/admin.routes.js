@@ -19,6 +19,13 @@ router.get(
   adminController.listUsers
 );
 
+router.get(
+  "/users/check-username/:username",
+  authMiddleware,
+  rbacMiddleware("ADMIN"),
+  adminController.checkUsername
+);
+
 router.put(
   "/users/:userId/erp-map",
   authMiddleware,

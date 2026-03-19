@@ -6,11 +6,18 @@ const UserErpMappingModel = require("../models/userErpMapping.model");
 
 exports.createUser = async (req, res) => {
   try {
-    const { username, password,email, full_name, role_code } = req.body;
+    const { username, password,email, full_name, role_code, erpuser , contactnumber, whatsappno } = req.body;
     const { tenant_id } = req.user;
 
     if (!username || !password || !role_code) {
       return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    const exists = await UserModel.checkUsernameExists(username);
+    if (exists) {
+      return res.status(400).json({
+        message: "Username already exists"
+      });
     }
 
     const password_hash = await bcrypt.hash(password, 10);
@@ -20,7 +27,10 @@ exports.createUser = async (req, res) => {
       username,
       email,
       password_hash,
-      full_name
+      full_name,
+      erpuser,
+      contactnumber,
+      whatsappno
     });
 
     // Assign role
@@ -81,6 +91,22 @@ exports.mapUserToErp = async (req, res) => {
   } catch (err) {
     console.error("ERP MAPPING ERROR:", err);
     res.status(500).json({ message: "Failed to save ERP mapping" });
+  }
+};
+
+exports.checkUsername = async (req, res) => {
+  try {
+    const { username } = req.params;
+
+    const exists = await UserModel.checkUsernameExists(username);
+
+    res.json({
+      exists
+    });
+
+  } catch (err) {
+    console.error("CHECK USERNAME ERROR:", err);
+    res.status(500).json({ message: "Error checking username" });
   }
 };
 
