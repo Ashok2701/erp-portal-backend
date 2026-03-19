@@ -24,3 +24,10 @@ exports.getCustomers = async () => {
 
    return adapter.getCustomers();
 };
+
+exports.getSuppliers = async () => {
+
+   const adapter = ERPFactory.getERPAdapter();
+
+   return adapter.getSuppliers();
+};

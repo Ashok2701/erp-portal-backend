@@ -9,9 +9,9 @@ exports.getCustomers = async (req, res) => {
 
 exports.getSuppliers = async (req, res) => {
 
-  const customers = await erpService.getCustomers();
+  const suppliers = await erpService.getSuppliers();
 
-  res.json(customers);
+  res.json(suppliers);
 };
 
 exports.getProducts = async (req, res) => {
