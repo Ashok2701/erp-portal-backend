@@ -28,8 +28,8 @@ class SageX3Adapter extends BaseERPAdapter {
 
    const result = await pool.request().query(`
      SELECT
-       BPCNUM AS customer_code,
-       BPCNAM AS customer_name
+       BPCNUM_0 AS customer_code,
+       BPCNAM_0 AS customer_name
      FROM TMSNEW.BPCUSTOMER
    `);
 
