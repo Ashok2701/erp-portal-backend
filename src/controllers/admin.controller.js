@@ -6,7 +6,7 @@ const UserErpMappingModel = require("../models/userErpMapping.model");
 
 exports.createUser = async (req, res) => {
   try {
-    const { username, password,email, full_name, role_code, erpuser , contactnumber, whatsappno } = req.body;
+    const { username, password,email, full_name, role_code , contact_number, whatsapp_number, erp_entity_type ,erp_entity_code  } = req.body;
     const { tenant_id } = req.user;
 
     if (!username || !password || !role_code) {
@@ -28,9 +28,10 @@ exports.createUser = async (req, res) => {
       email,
       password_hash,
       full_name,
-      erpuser,
-      contactnumber,
-      whatsappno
+      contact_number,
+      whatsapp_number,
+      erp_entity_type,
+     erp_entity_code
     });
 
     // Assign role
