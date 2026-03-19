@@ -111,3 +111,61 @@ exports.checkUsername = async (req, res) => {
   }
 };
 
+
+exports.updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const {
+      full_name,
+      email,
+      contact_number,
+      whatsapp_number,
+      erp_entity_type,
+      erp_entity_code,
+      is_active,
+      roles
+    } = req.body;
+
+    // update user
+    await UserModel.updateUser(id, {
+      full_name,
+      email,
+      contact_number,
+      whatsapp_number,
+      erp_entity_type,
+      erp_entity_code,
+      is_active
+    });
+
+    // update roles (optional)
+    if (roles) {
+      await UserModel.updateUserRoles(id, roles);
+    }
+
+    res.json({
+      message: "User updated successfully"
+    });
+
+  } catch (err) {
+    console.error("UPDATE USER ERROR:", err);
+    res.status(500).json({ message: "Failed to update user" });
+  }
+};
+
+
+exports.deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await UserModel.deleteUser(id);
+
+    res.json({
+      message: "User deleted successfully"
+    });
+
+  } catch (err) {
+    console.error("DELETE USER ERROR:", err);
+    res.status(500).json({ message: "Failed to delete user" });
+  }
+};

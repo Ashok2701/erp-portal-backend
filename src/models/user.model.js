@@ -37,8 +37,10 @@ exports.createUser = async (user) => {
 exports.getAllUsers = async (tenantId) => {
   const result = await pool.query(
     `
-    SELECT user_id, username, full_name, is_active
-    FROM users
+   SELECT u.user_id, username, full_name, u.is_active, contact_number ,whatsapp_number ,country_code ,erp_entity_code ,erp_entity_type, r.role_name
+    FROM users u
+    left join user_roles ur on ur.user_id = u.user_id 
+    left join roles r on r.role_id  = ur.role_id 
     WHERE tenant_id = $1
     ORDER BY created_at DESC
     `,
@@ -56,4 +58,78 @@ exports.checkUsernameExists = async (username) => {
   );
 
   return result.rowCount > 0;
+};
+
+exports.updateUser = async (userId, data) => {
+
+  const {
+    full_name,
+    email,
+    contact_number,
+    whatsapp_number,
+    erp_entity_type,
+    erp_entity_code,
+    is_active
+  } = data;
+
+  await pool.query(
+    `
+    UPDATE users
+    SET
+      full_name = $1,
+      email = $2,
+      contact_number = $3,
+      whatsapp_number = $4,
+      erp_entity_type = $5,
+      erp_entity_code = $6,
+      is_active = $7
+    WHERE user_id = $8
+    `,
+    [
+      full_name,
+      email,
+      contact_number,
+      whatsapp_number,
+      erp_entity_type,
+      erp_entity_code,
+      is_active,
+      userId
+    ]
+  );
+};
+
+exports.updateUserRoles = async (userId, roleIds) => {
+
+  // delete old roles
+  await pool.query(
+    `DELETE FROM user_roles WHERE user_id = $1`,
+    [userId]
+  );
+
+  // insert new roles
+  for (const roleId of roleIds) {
+    await pool.query(
+      `
+      INSERT INTO user_roles (user_role_id, user_id, role_id)
+      VALUES (uuid_generate_v4(), $1, $2)
+      `,
+      [userId, roleId]
+    );
+  }
+};
+
+exports.deleteUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await UserModel.deleteUser(id);
+
+    res.json({
+      message: "User deleted successfully"
+    });
+
+  } catch (err) {
+    console.error("DELETE USER ERROR:", err);
+    res.status(500).json({ message: "Failed to delete user" });
+  }
 };

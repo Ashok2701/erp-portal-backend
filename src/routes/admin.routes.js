@@ -33,4 +33,12 @@ router.put(
   adminController.mapUserToErp
 );
 
+
+
+router.get("/users/:id", adminMiddleware,rbacMiddleware("ADMIN"), adminController.getUserById);
+
+router.put("/users/:id", adminMiddleware,rbacMiddleware("ADMIN"), adminController.updateUser);
+
+router.delete("/users/:id", adminMiddleware,rbacMiddleware("ADMIN"), adminController.deleteUser);
+
 module.exports = router;
