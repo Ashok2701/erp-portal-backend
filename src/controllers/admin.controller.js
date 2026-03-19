@@ -11,8 +11,10 @@ exports.createUser = async (req, res) => {
       password,
       full_name,
       email,
+      is_active,
       contact_number,
       whatsapp_number,
+      country_code,
       erp_entity_type,
       erp_entity_code,
       role_code   // 👈 from frontend
@@ -35,8 +37,10 @@ exports.createUser = async (req, res) => {
       password_hash,
       full_name,
       email,
+      is_active,
       contact_number,
       whatsapp_number,
+      country_code,
       erp_entity_type,
       erp_entity_code
     });
@@ -128,6 +132,7 @@ exports.updateUser = async (req, res) => {
     const {
       full_name,
       email,
+      
       contact_number,
       whatsapp_number,
       erp_entity_type,
@@ -137,7 +142,7 @@ exports.updateUser = async (req, res) => {
     } = req.body;
 
     // update user
-    await UserModel.updateUser(id, {
+    await UserModel.updateser(id, {
       full_name,
       email,
       contact_number,
