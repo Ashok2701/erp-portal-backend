@@ -36,11 +36,11 @@ exports.createUser = async (user) => {
       user_id, tenant_id, username,email, password_hash, full_name, is_active, contact_number, whatsapp_number , country_code,erp_entity_type ,erp_entity_code
     )
     VALUES (
-      gen_random_uuid(), $1, $2, $3, $4,$5, true, $6,$7, '+91',$8,$9
+      gen_random_uuid(), $1, $2, $3, $4,$5,  $6,$7,$8 '+91',$9 , $10
     )
     RETURNING user_id, username, email
     `,
-    [user.tenant_id, user.username,user.email , user.password_hash, user.full_name, user.contact_number, user.whatsapp_number, user.erp_entity_type , user.erp_entity_code ]
+    [user.tenant_id, user.username,user.email , user.password_hash, user.full_name,user.is_active ,user.contact_number, user.whatsapp_number, user.erp_entity_type , user.erp_entity_code ]
   );
 
   return result.rows[0];
