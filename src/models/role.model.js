@@ -88,3 +88,16 @@ exports.softDeleteRole = async (role_id) => {
     [role_id]
   );
 };
+
+exports.getRoleIdByCode = async (roleCode) => {
+  const result = await pool.query(
+    `
+    SELECT role_id
+    FROM roles
+    WHERE LOWER(role_code) = LOWER($1)
+    `,
+    [roleCode]
+  );
+
+  return result.rows[0]; // { role_id }
+};

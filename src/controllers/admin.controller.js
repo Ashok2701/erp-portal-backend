@@ -3,49 +3,57 @@ const UserModel = require("../models/user.model");
 const pool = require("../config/db");
 const UserErpMappingModel = require("../models/userErpMapping.model");
 
-
 exports.createUser = async (req, res) => {
   try {
-    const { username, password,email, full_name, role_code , contact_number, whatsapp_number, erp_entity_type ,erp_entity_code  } = req.body;
+    const {
+      username,
+      password,
+      full_name,
+      email,
+      contact_number,
+      whatsapp_number,
+      erp_entity_type,
+      erp_entity_code,
+      role_code   // 👈 from frontend
+    } = req.body;
+
     const { tenant_id } = req.user;
 
-    if (!username || !password || !role_code) {
-      return res.status(400).json({ message: "Missing required fields" });
-    }
-
+    // check duplicate
     const exists = await UserModel.checkUsernameExists(username);
     if (exists) {
-      return res.status(400).json({
-        message: "Username already exists"
-      });
+      return res.status(400).json({ message: "Username already exists" });
     }
 
     const password_hash = await bcrypt.hash(password, 10);
 
+    // create user
     const user = await UserModel.createUser({
       tenant_id,
       username,
-      email,
       password_hash,
       full_name,
+      email,
       contact_number,
       whatsapp_number,
       erp_entity_type,
-     erp_entity_code
+      erp_entity_code
     });
 
-    // Assign role
-    await pool.query(
-      `
-      INSERT INTO user_roles (user_id, role_id)
-      SELECT $1, role_id FROM roles WHERE role_code = $2
-      `,
-      [user.user_id, role_code]
-    );
+    // 🔥 Convert role_code → role_id
+    if (role_code) {
+      const role = await RoleModel.getRoleIdByCode(role_code);
 
-    res.status(201).json({
+      if (!role) {
+        return res.status(400).json({ message: "Invalid role_code" });
+      }
+
+      await UserModel.assignRoles(user.user_id, [role.role_id]);
+    }
+
+    res.json({
       message: "User created successfully",
-      user
+      user_id: user.user_id
     });
 
   } catch (err) {
@@ -124,7 +132,7 @@ exports.updateUser = async (req, res) => {
       erp_entity_type,
       erp_entity_code,
       is_active,
-      roles
+      role_code
     } = req.body;
 
     // update user
@@ -138,11 +146,11 @@ exports.updateUser = async (req, res) => {
       is_active
     });
 
-    // update roles (optional)
-    if (roles) {
-      await UserModel.updateUserRoles(id, roles);
-    }
+  if (role_code) {
+  const role = await RoleModel.getRoleIdByCode(role_code);
 
+  await UserModel.updateUserRoles(id, [role.role_id]);
+}
     res.json({
       message: "User updated successfully"
     });

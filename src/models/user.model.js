@@ -16,6 +16,18 @@ exports.findByUsername  = async(username) => {
 
 };
 
+exports.assignRoles = async (userId, roleIds) => {
+  for (const roleId of roleIds) {
+    await pool.query(
+      `
+      INSERT INTO user_roles (user_role_id, user_id, role_id)
+      VALUES (uuid_generate_v4(), $1, $2)
+      `,
+      [userId, roleId]
+    );
+  }
+};
+
 
 exports.createUser = async (user) => {
   const result = await pool.query(
