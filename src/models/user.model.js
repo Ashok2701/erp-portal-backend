@@ -51,6 +51,22 @@ exports.getAllUsers = async (tenantId) => {
 };
 
 
+exports.getUserById = async (id) => {
+  const result = await pool.query(
+    `
+   SELECT u.user_id, username, full_name, u.is_active, contact_number ,whatsapp_number ,country_code ,erp_entity_code ,erp_entity_type, r.role_name
+    FROM users u
+    left join user_roles ur on ur.user_id = u.user_id 
+    left join roles r on r.role_id  = ur.role_id 
+    WHERE u.user_id = $1
+    ORDER BY created_at DESC
+    `,
+    [id]
+  );
+
+  return result.rows;
+};
+
 exports.checkUsernameExists = async (username) => {
   const result = await pool.query(
     `SELECT 1 FROM users WHERE LOWER(username) = LOWER($1)`,

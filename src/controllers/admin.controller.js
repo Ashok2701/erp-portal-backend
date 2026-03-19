@@ -169,3 +169,17 @@ exports.deleteUser = async (req, res) => {
     res.status(500).json({ message: "Failed to delete user" });
   }
 };
+
+exports.getUserById = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+     const userdetailsbyID = await UserModel.getUserById(id);
+    res.json({ userdetailsbyID });
+
+  } catch (err) {
+    console.error("Fetching user details ERROR:", err);
+    res.status(500).json({ message: "Failed to get user details" });
+  }
+};
+
