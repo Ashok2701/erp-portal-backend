@@ -28,7 +28,7 @@ exports.createUser = async (user) => {
     )
     RETURNING user_id, username, email
     `,
-    [user.tenant_id, user.username,user.email , user.password_hash, user.full_name]
+    [user.tenant_id, user.username,user.email , user.password_hash, user.full_name, user.contact_number, user.whatsapp_number, user.erp_entity_type , user.erp_entity_code ]
   );
 
   return result.rows[0];
