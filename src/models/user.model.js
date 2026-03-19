@@ -42,7 +42,7 @@ exports.getAllUsers = async (tenantId) => {
     left join user_roles ur on ur.user_id = u.user_id 
     left join roles r on r.role_id  = ur.role_id 
     WHERE tenant_id = $1
-    ORDER BY created_at DESC
+    ORDER BY u.created_at DESC
     `,
     [tenantId]
   );
@@ -59,7 +59,7 @@ exports.getUserById = async (id) => {
     left join user_roles ur on ur.user_id = u.user_id 
     left join roles r on r.role_id  = ur.role_id 
     WHERE u.user_id = $1
-    ORDER BY created_at DESC
+    ORDER BY u.created_at DESC
     `,
     [id]
   );
@@ -134,18 +134,11 @@ exports.updateUserRoles = async (userId, roleIds) => {
   }
 };
 
-exports.deleteUser = async (req, res) => {
-  try {
-    const { id } = req.params;
 
-    await UserModel.deleteUser(id);
+exports.deleteUser = async (userId) => {
 
-    res.json({
-      message: "User deleted successfully"
-    });
+  await pool.query(`DELETE FROM user_roles WHERE user_id = $1`, [userId]);
 
-  } catch (err) {
-    console.error("DELETE USER ERROR:", err);
-    res.status(500).json({ message: "Failed to delete user" });
-  }
+  await pool.query(`DELETE FROM users WHERE user_id = $1`, [userId]);
 };
+
