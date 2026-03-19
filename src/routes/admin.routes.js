@@ -34,11 +34,10 @@ router.put(
 );
 
 
+router.get("/users/:id", authMiddleware,rbacMiddleware("ADMIN"), adminController.getUserById);
 
-router.get("/users/:id", adminMiddleware,rbacMiddleware("ADMIN"), adminController.getUserById);
+router.put("/users/:id", authMiddleware,rbacMiddleware("ADMIN"), adminController.updateUser);
 
-router.put("/users/:id", adminMiddleware,rbacMiddleware("ADMIN"), adminController.updateUser);
-
-router.delete("/users/:id", adminMiddleware,rbacMiddleware("ADMIN"), adminController.deleteUser);
+router.delete("/users/:id", authMiddleware,rbacMiddleware("ADMIN"), adminController.deleteUser);
 
 module.exports = router;
