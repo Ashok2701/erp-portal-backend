@@ -30,7 +30,7 @@ class SageX3Adapter extends BaseERPAdapter {
      SELECT
        BPCNUM AS customer_code,
        BPCNAM AS customer_name
-     FROM BPCUSTOMER
+     FROM TMSNEW.BPCUSTOMER
    `);
 
    return result.recordset;
