@@ -31,3 +31,19 @@ exports.getSuppliers = async () => {
 
    return adapter.getSuppliers();
 };
+
+exports.getProducts = async (filters) => {
+  //const connection = await getERPConnection(tenantId);
+
+   const adapter = ERPFactory.getERPAdapter(filters);
+
+  return adapter.getProducts();
+};
+
+exports.getProductCategories = async () => {
+//  const connection = await getERPConnection(tenantId);
+
+  const adapter = ERPFactory.getERPAdapter();
+
+  return adapter.getProductCategories();
+};

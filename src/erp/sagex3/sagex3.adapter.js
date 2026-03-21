@@ -14,7 +14,74 @@ class SageX3Adapter extends BaseERPAdapter {
  }
 
 
- 
+ async getProducts(filters = {}) {
+    
+  const sql = require("mssql");
+
+   const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+   const pool = await sql.connect(config);
+  
+  let query = `
+    SELECT I.ITMREF_0 AS PROD_CODE,I.TCLCOD_0 AS CATEGORY, I.ITMDES1_0 AS PROD_DESC, C.BLOB_0 AS PROD_IMG, I.STU_0 AS UOM
+FROM 
+TMSNEW.ITMMASTER I
+LEFT JOIN TMSNEW.CBLOB C ON I.ITMREF_0 = C.IDENT1_0 AND C.CODBLB_0 = 'ITM'
+    `;
+
+    const values = [];
+
+    if (filters.category) {
+      query += " WHERE TCLCOD_0 = $1";
+      values.push(filters.category);
+    }
+
+    const result = await this.pool.query(query, values);
+
+    return result.rows;
+
+
+ //  return result.recordset;
+
+  }
+
+  async getProductCategories() {
+    
+    const sql = require("mssql");
+
+   const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+   const pool = await sql.connect(config);
+    
+  
+   const result = await pool.request().query(`
+      SELECT TCLCOD_0 AS Category_Code, TCLDES_0 AS Category_Desc FROM TMSNEW.ITMCATEG
+   `);
+
+   return result.recordset;
+    
+  }
+
  async getSuppliersFromDB(){
 
    const sql = require("mssql");

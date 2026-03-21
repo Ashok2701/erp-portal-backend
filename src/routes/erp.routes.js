@@ -9,4 +9,7 @@ router.get("/products", auth, ctrl.getProducts);
 router.get("/customers/:code/addresses", auth, ctrl.getCustomerAddresses);
 router.get("/dashboard", auth, ctrl.getDashboard);
 
+router.get("/products", auth, ctrl.getProducts);
+router.get("/product-categories", auth, ctrl.getProductCategories);
+
 module.exports = router;
