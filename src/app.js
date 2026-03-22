@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const cartRoutes = require("./routes/cart.routes");
 
 
 const authRoutes = require("./routes/auth.routes");
@@ -21,5 +22,6 @@ app.use("/roles", require("./routes/role.routes"));
 app.use("/role-modules", roleModuleRoutes);
 app.use("/erp", require("./routes/erp.routes"));
 app.use("/api/chat", chatRoutes);
+app.use("/cart", cartRoutes);
 
 module.exports = app;
