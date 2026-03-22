@@ -39,7 +39,9 @@ exports.getProducts = async (req, res) => {
   try {
    // const tenantId = req.user.tenantId;
 
-    const data = await erpService.getProducts( req.query);
+    const filters = req.query;
+
+    const data = await erpService.getProducts(filters);
 
     res.json({ success: true, data });
   } catch (error) {

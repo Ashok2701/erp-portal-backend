@@ -39,16 +39,17 @@ TMSNEW.ITMMASTER I
 LEFT JOIN TMSNEW.CBLOB C ON I.ITMREF_0 = C.IDENT1_0 AND C.CODBLB_0 = 'ITM'
     `;
 
-    const values = [];
+   
+  const request = pool.request();
 
-    if (filters.category) {
-      query += " WHERE TCLCOD_0 = $1";
-      values.push(filters.category);
-    }
+  if (filters.category) {
+    query += " WHERE I.TCLCOD_0 = @category";
+    request.input("category", sql.VarChar, filters.category);
+  }
 
-    const result = await this.pool.query(query, values);
+  const result = await request.query(query);
 
-    return result.rows;
+  return result.recordset;
 
 
  //  return result.recordset;
