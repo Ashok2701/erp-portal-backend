@@ -14,11 +14,11 @@ class SageX3Adapter extends BaseERPAdapter {
  }
 
  async getCustomerAddresses(customerCode) {
-   return this.db.getCustomerAddresses(customerCode);
+   return this.getCustomerAddressesFromDB(customerCode);
  }
 
  async getSupplierAddresses(supplierCode) {
-   return this.db.getSupplierAddresses(supplierCode);
+   return this.getSupplierAddressesFromDB(supplierCode);
  }
 
 
@@ -152,11 +152,24 @@ LEFT JOIN TMSNEW.CBLOB C ON I.ITMREF_0 = C.IDENT1_0 AND C.CODBLB_0 = 'ITM'
  }
 
 
-async getCustomerAddresses(customerCode) {
+async getCustomerAddressesFromDB(customerCode) {
 
   const sql = require("mssql");
 
-  const pool = await sql.connect(this.config);
+    const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+
+  const pool = await sql.connect(config);
 
   const query = `
     SELECT
@@ -178,6 +191,42 @@ async getCustomerAddresses(customerCode) {
 }
 
 
+async getSupplierAddressesFromDB(supplierCode) {
+
+  const sql = require("mssql");
+
+   const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+  const pool = await sql.connect(config);
+
+  const query = `
+    SELECT 
+      ADRNUM_0 AS address_code,
+      ADRNAM_0 AS address_name,
+      ADD1_0 AS address_line1,
+      CTY_0 AS city,
+      CRY_0 AS country
+    FROM TMSNEW.BPADDRESS
+    WHERE BPSNUM_0 = @supplierCode
+  `;
+
+  const request = pool.request();
+  request.input("supplierCode", sql.VarChar, supplierCode);
+
+  const result = await request.query(query);
+
+  return result.recordset;
+}
 
 
 }
