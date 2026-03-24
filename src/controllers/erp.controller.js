@@ -14,7 +14,7 @@ exports.getSuppliers = async (req, res) => {
   res.json(suppliers);
 };
 
-exports.getProducts = async (req, res) => {
+exports.getProducts11 = async (req, res) => {
 
   const customers = await erpService.getCustomers();
 
