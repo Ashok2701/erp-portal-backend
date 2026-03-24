@@ -21,19 +21,6 @@ exports.getProducts = async (req, res) => {
   res.json(customers);
 };
 
-exports.getCustomerAddresses = async (req, res) => {
-
-  const customerAddress = await erpService.getCustomers();
-
-  res.json(customerAddress);
-};
-
-exports.getDashboard = async (req, res) => {
-
-  const customers = await erpService.getCustomers();
-
-  res.json(customers);
-};
 
 exports.getProducts = async (req, res) => {
   try {
@@ -60,5 +47,31 @@ exports.getProductCategories = async (req, res) => {
   } catch (error) {
     console.error("getProductCategories error:", error);
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+exports.getCustomerAddresses = async (req, res) => {
+  try {
+    const { customerCode } = req.params;
+
+    const data = await erpService.getCustomerAddresses(customerCode);
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.getSupplierAddresses = async (req, res) => {
+  try {
+    const { supplierCode } = req.params;
+
+    const data = await erpService.getSupplierAddresses(supplierCode);
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: err.message });
   }
 };

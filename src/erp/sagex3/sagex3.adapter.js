@@ -13,6 +13,14 @@ class SageX3Adapter extends BaseERPAdapter {
       return this.getSuppliersFromDB();
  }
 
+ async getCustomerAddresses(customerCode) {
+   return this.db.getCustomerAddresses(customerCode);
+ }
+
+ async getSupplierAddresses(supplierCode) {
+   return this.db.getSupplierAddresses(supplierCode);
+ }
+
 
  async getProducts(filters = {}) {
     
@@ -142,6 +150,33 @@ LEFT JOIN TMSNEW.CBLOB C ON I.ITMREF_0 = C.IDENT1_0 AND C.CODBLB_0 = 'ITM'
    return result.recordset;
 
  }
+
+
+async getCustomerAddresses(customerCode) {
+
+  const sql = require("mssql");
+
+  const pool = await sql.connect(this.config);
+
+  const query = `
+    SELECT
+      ADRNUM_0 AS address_code,
+      ADRNAM_0 AS address_name,
+      ADD1_0 AS address_line1,
+      CTY_0 AS city,
+      CRY_0 AS country
+    FROM TMSNEW.BPADDRESS
+    WHERE BPACOD_0 = @customerCode
+  `;
+
+  const request = pool.request();
+  request.input("customerCode", sql.VarChar, customerCode);
+
+  const result = await request.query(query);
+
+  return result.recordset;
+}
+
 
 
 

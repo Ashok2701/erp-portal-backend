@@ -47,3 +47,14 @@ exports.getProductCategories = async () => {
 
   return adapter.getProductCategories();
 };
+
+
+exports.getCustomerAddresses = async (customerCode) => {
+  const adapter = ERPFactory.getERPAdapter();
+  return adapter.getCustomerAddresses(customerCode);
+};
+
+exports.getSupplierAddresses = async (supplierCode) => {
+  const adapter = ERPFactory.getERPAdapter();
+  return adapter.getSupplierAddresses(supplierCode);
+};
