@@ -22,6 +22,13 @@ exports.getProducts11 = async (req, res) => {
 };
 
 
+exports.getDashboard = async (req, res) => {
+
+  const customers = await erpService.getCustomers();
+
+  res.json(customers);
+};
+
 exports.getProducts = async (req, res) => {
   try {
    // const tenantId = req.user.tenantId;
