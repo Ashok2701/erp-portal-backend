@@ -1,25 +1,12 @@
 const express = require("express");
 const router = express.Router();
+const ctrl = require("../controllers/salesRequest.controller");
+const auth = require("../middleware/auth.middleware");
 
-const authMiddleware = require("../middleware/auth.middleware");
-const salesRequestController = require("../controllers/salesRequest.controller");
-
-router.post(
-  "/",
-  authMiddleware,
-  salesRequestController.createSalesRequest
-);
-
-router.get(
-  "/",
-  authMiddleware,
-  salesRequestController.listSalesRequests
-);
-
-router.get(
-  "/:id",
-  authMiddleware,
-  salesRequestController.getSalesRequestDetails
-);
+router.post("/", auth, ctrl.createSalesRequest);
+router.get("/", auth, ctrl.getAllSalesRequest);
+router.get("/:id", auth, ctrl.getSalesRequestById);
+router.put("/:id", auth, ctrl.updateSalesRequest);
+router.delete("/:id", auth, ctrl.removeSalesRequest);
 
 module.exports = router;
