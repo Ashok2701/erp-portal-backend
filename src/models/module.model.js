@@ -6,7 +6,7 @@ exports.getModulesByUserId = async (userId) => {
 
     `
     SELECT DISTINCT
-       m.module_code, m.module_name, m.route_path, m.icon_name,
+       m.module_id, m.module_name, m.route_path, m.icon_name,
        rm.can_view, rm.can_create, rm.can_edit, rm.can_delete
     FROM user_roles ur
     JOIN role_modules rm ON ur.role_id = rm.role_id
@@ -26,9 +26,7 @@ exports.getModulesByUserId = async (userId) => {
 
 exports.createModule = async (data) => {
   const {
-    module_code,
     module_name,
-    module_type,
     route_path,
     icon_name
   } = data;
@@ -37,21 +35,17 @@ exports.createModule = async (data) => {
     `
     INSERT INTO modules (
       module_id,
-      module_code,
       module_name,
-      module_type,
       route_path,
       icon_name,
       is_active
     )
-    VALUES ($1, $2, $3, $4, $5, $6, true)
+    VALUES ($1, $2, $3, $4, true)
     RETURNING *
     `,
     [
       uuidv4(),
-      module_code,
-      module_name,
-      module_type,
+      module_name, 
       route_path,
       icon_name
     ]
@@ -81,16 +75,14 @@ exports.updateModule = async (module_id, data) => {
     `
     UPDATE modules
     SET module_name = $1,
-        module_type = $2,
-        route_path = $3,
-        icon_name = $4,
-        is_active = $5
-    WHERE module_id = $6
+        route_path = $2,
+        icon_name = $3,
+        is_active = $4
+    WHERE module_id = $5
     RETURNING *
     `,
     [
       module_name,
-      module_type,
       route_path,
       icon_name,
       is_active,

@@ -6,6 +6,10 @@ const adminRoutes = require("./routes/admin.routes");
 const salesRequestRoutes = require("./routes/salesRequest.routes");
 const roleModuleRoutes = require("./routes/roleModule.routes");
 const chatRoutes = require("./routes/chat.routes");
+const salesQuoteRoutes = require("./routes/salesQuote.routes");
+const salesOrderRoutes = require("./routes/salesOrder.routes");
+const salesInvoiceRoutes = require("./routes/salesInvoice.routes");
+const PaymentRoutes = require("./routes/payment.routes");
 
 const app = express();
 
@@ -21,5 +25,10 @@ app.use("/role-modules", roleModuleRoutes);
 app.use("/erp", require("./routes/erp.routes"));
 app.use("/api/chat", chatRoutes);
 app.use("/cart", cartRoutes);
+
+app.use("/sorder", salesOrderRoutes);
+app.use("/sinvoice", salesInvoiceRoutes);
+app.use("/squote", salesQuoteRoutes);
+app.use("/payment", PaymentRoutes);
 
 module.exports = app;
