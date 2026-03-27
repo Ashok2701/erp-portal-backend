@@ -65,7 +65,6 @@ exports.deleteModule = async (module_id) => {
 exports.updateModule = async (module_id, data) => {
   const {
     module_name,
-    module_type,
     route_path,
     icon_name,
     is_active
