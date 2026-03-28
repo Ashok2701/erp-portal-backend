@@ -51,7 +51,7 @@ GROUP BY r.role_name
   const ordersTotal = await db.query(`SELECT COUNT(*) FROM sales_requests`);
   const ordersToday = await db.query(`
     SELECT COUNT(*) FROM sales_requests 
-    WHERE DATE(created_at) = CURRENT_DATE
+    WHERE DATE(created_time) = CURRENT_DATE
   `);
 
   const ordersPending = await db.query(`
