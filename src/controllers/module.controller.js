@@ -2,19 +2,12 @@ const ModuleModel = require("../models/module.model");
 
 exports.createModule = async (req, res) => {
   try {
-    const {
-      module_code,
+    const {   
       module_name,
-      module_type,
       route_path,
-      icon_name
+      icon_name,
+      sort_order
     } = req.body;
-
-    if (!module_code || !module_name || !module_type) {
-      return res.status(400).json({
-        message: "module_code, module_name and module_type are required"
-      });
-    }
 
     const module = await ModuleModel.createModule(req.body);
     res.status(201).json(module);

@@ -28,7 +28,8 @@ exports.createModule = async (data) => {
   const {
     module_name,
     route_path,
-    icon_name
+    icon_name,
+    sort_order
   } = data;
 
   const result = await pool.query(
@@ -38,16 +39,18 @@ exports.createModule = async (data) => {
       module_name,
       route_path,
       icon_name,
-      is_active
+      is_active,
+      sort_order
     )
-    VALUES ($1, $2, $3, $4, true)
+    VALUES ($1, $2, $3, $4, true, $5)
     RETURNING *
     `,
     [
       uuidv4(),
       module_name, 
       route_path,
-      icon_name
+      icon_name,
+      sort_order
     ]
   );
 
