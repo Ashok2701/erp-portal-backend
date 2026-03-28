@@ -287,7 +287,21 @@ async getAllQuotes(user) {
 async getQuoteDetail(id, user) {
 
   const sql = require("mssql");
-  const pool = await sql.connect(this.config);
+
+  const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+
+  const pool = await sql.connect(config);
 
   const result = await pool.request()
     .input("orderNo", sql.NVarChar, id)
@@ -319,7 +333,21 @@ async getQuoteDetail(id, user) {
 async getAllOrders(user) {
 
   const sql = require("mssql");
-  const pool = await sql.connect(this.config);
+
+  const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+
+  const pool = await sql.connect(config);
 
   const result = await pool.request()
     .input("x3user", sql.NVarChar, user.erp_customer_code)
@@ -361,7 +389,21 @@ async getAllOrders(user) {
 async getOrderDetail(id, user) {
 
   const sql = require("mssql");
-  const pool = await sql.connect(this.config);
+
+  const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+
+  const pool = await sql.connect(config);
 
   const result = await pool.request()
     .input("orderNo", sql.NVarChar, id)
@@ -397,7 +439,21 @@ async getOrderDetail(id, user) {
 async getAllInvoices(user) {
 
   const sql = require("mssql");
-  const pool = await sql.connect(this.config);
+
+  const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+
+  const pool = await sql.connect(config);
 
   const result = await pool.request()
     .input("x3user", sql.NVarChar, user.erp_customer_code)
@@ -451,7 +507,20 @@ async getInvoiceDetail(id, user) {
 async getPendingInvoices(user) {
 
   const sql = require("mssql");
-  const pool = await sql.connect(this.config);
+
+    const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+  const pool = await sql.connect(config);
 
   const result = await pool.request()
     .input("x3user", sql.NVarChar, user.erp_customer_code)
@@ -474,7 +543,20 @@ async getPendingInvoices(user) {
 async getAllPayments(user) {
 
   const sql = require("mssql");
-  const pool = await sql.connect(this.config);
+
+    const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+  const pool = await sql.connect(config);
 
   const result = await pool.request()
     .input("x3user", sql.NVarChar, user.erp_customer_code)
@@ -511,7 +593,19 @@ async getAllPayments(user) {
 async getPaymentDetail(id, user) {
 
   const sql = require("mssql");
-  const pool = await sql.connect(this.config);
+
+    const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+  const pool = await sql.connect(config);
 
   const headerRes = await pool.request()
     .input("orderNo", sql.NVarChar, id)
@@ -546,7 +640,20 @@ async getPaymentDetail(id, user) {
 async getPaymentPendingInvoices(user) {
 
   const sql = require("mssql");
-  const pool = await sql.connect(this.config);
+
+    const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+  const pool = await sql.connect(config);
 
   const result = await pool.request()
     .input("x3user", sql.NVarChar, user.erp_customer_code)
