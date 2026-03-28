@@ -590,7 +590,7 @@ async getPaymentPendingInvoices(user) {
    const pool = await sql.connect(config);
   
   let query = `
-    select PRODUCT,PROD_DESC, SITE, PHYSICAL_QTY, ALLOCATED_QTY,AVAILABLE_QTY,UNIT,LOCATION from TMSNEW.XSTDALN_STOCK WHERE 1=1
+    select PRODUCT,PROD_DESC, SITE, PHYSICAL_QTY, ALLOCATED_QTY,AVAILABLE_QTY,UNIT,LOCATION,CATEGORY  from TMSNEW.XSTDALN_STOCK WHERE 1=1
     `;
 
    
@@ -606,6 +606,11 @@ async getPaymentPendingInvoices(user) {
   if (filters.warehouse) {
     query += " AND LOCATION = @warehouse";
     request.input("warehouse", sql.VarChar, filters.warehouse);
+  }
+
+  if (filters.category) {
+    query += " AND CATEGORY = @warehouse";
+    request.input("category", sql.VarChar, filters.warehouse);
   }
   const result = await request.query(query);
 

@@ -10,6 +10,7 @@ const salesQuoteRoutes = require("./routes/salesQuote.routes");
 const salesOrderRoutes = require("./routes/salesOrder.routes");
 const salesInvoiceRoutes = require("./routes/salesInvoice.routes");
 const PaymentRoutes = require("./routes/payment.routes");
+const dashboardRoutes = require("./routes/dashboard.routes");
 
 const app = express();
 
@@ -30,5 +31,9 @@ app.use("/sorder", salesOrderRoutes);
 app.use("/sinvoice", salesInvoiceRoutes);
 app.use("/squote", salesQuoteRoutes);
 app.use("/payment", PaymentRoutes);
+
+
+
+app.use("/dashboard", dashboardRoutes);
 
 module.exports = app;
