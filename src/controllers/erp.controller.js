@@ -82,3 +82,17 @@ exports.getSupplierAddresses = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+
+exports.getStock = async (req, res) => {
+  try {
+    const filters = req.query;
+
+    const data = await erpService.getStock(filters);
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("getStock error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

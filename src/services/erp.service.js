@@ -58,3 +58,11 @@ exports.getSupplierAddresses = async (supplierCode) => {
   const adapter = ERPFactory.getERPAdapter();
   return adapter.getSupplierAddresses(supplierCode);
 };
+
+
+// STOCK
+
+exports.getStock = async (filters) => {
+  const adapter = ERPFactory.getERPAdapter();
+  return adapter.getStock(filters);
+};

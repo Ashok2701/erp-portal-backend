@@ -21,6 +21,10 @@ class SageX3Adapter extends BaseERPAdapter {
    return this.getSupplierAddressesFromDB(supplierCode);
  }
 
+ async getStock(filters) {
+  return this.getStockFromDb(filters);
+}
+
 
  async getProducts(filters = {}) {
     
@@ -563,6 +567,54 @@ async getPaymentPendingInvoices(user) {
 
   return result.recordset;
 }
+
+
+ // STOCK
+
+ async getStockFromDb(filters = {}) {
+    
+  const sql = require("mssql");
+
+   const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+   const pool = await sql.connect(config);
+  
+  let query = `
+    select PRODUCT,PROD_DESC, SITE, PHYSICAL_QTY, ALLOCATED_QTY,AVAILABLE_QTY,UNIT,LOCATION from TMSNEW.XSTDALN_STOCK WHERE 1=1
+    `;
+
+   
+  const request = pool.request();
+
+
+  // 🔹 Filters
+  if (filters.product) {
+    query += " AND PRODUCT = @product";
+    request.input("product", sql.VarChar, filters.product);
+  }
+
+  if (filters.warehouse) {
+    query += " AND LOCATION = @warehouse";
+    request.input("warehouse", sql.VarChar, filters.warehouse);
+  }
+  const result = await request.query(query);
+
+  return result.recordset;
+
+
+ //  return result.recordset;
+
+  }
 
 }
 
