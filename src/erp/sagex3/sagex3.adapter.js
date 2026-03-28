@@ -264,7 +264,7 @@ async getAllQuotes(user) {
       LEFT JOIN tbs.TMSNEW.ATEXTRA D
         ON A.SQHTYP_0 = D.IDENT1_0
        AND D.CODFIC_0 = 'TABSQHTYP'
-      WHERE A.SALFCY_0=@site AND A.BPCORD_0=@x3user
+      WHERE  A.BPCORD_0=@x3user
       ORDER BY A.QUODAT_0 DESC
     `);
 
@@ -275,7 +275,7 @@ async getAllQuotes(user) {
       .query(`
         SELECT ITMREF_0, ITMDES1_0, QTY_0, SAU_0, NETPRIATI_0
         FROM tbs.TMSNEW.SQUOTED
-        WHERE SALFCY_0=@site AND SQHNUM_0=@quoteNo
+        WHERE  SQHNUM_0=@quoteNo
       `);
 
     row.items = items.recordset;
@@ -332,7 +332,7 @@ async getAllOrders(user) {
              C.BPTNAM_0
       FROM tbs.TMSNEW.SORDER A
       LEFT JOIN tbs.TMSNEW.BPCARRIER C ON A.BPTNUM_0 = C.BPTNUM_0
-      WHERE A.SALFCY_0=@site AND A.BPCORD_0=@x3user
+      WHERE  A.BPCORD_0=@x3user
       ORDER BY A.ORDDAT_0 DESC
     `);
 
@@ -348,7 +348,7 @@ async getAllOrders(user) {
         FROM tbs.TMSNEW.SORDERQ A
         LEFT JOIN tbs.TMSNEW.SORDERP C
           ON A.SOHNUM_0 = C.SOHNUM_0
-        WHERE A.SALFCY_0=@site AND A.SOHNUM_0=@orderNo
+        WHERE  A.SOHNUM_0=@orderNo
       `);
 
     row.items = items.recordset;
@@ -385,7 +385,7 @@ async getOrderDetail(id, user) {
       FROM tbs.TMSNEW.SORDERQ A
       LEFT JOIN tbs.TMSNEW.SORDERP C
         ON A.SOHNUM_0 = C.SOHNUM_0
-      WHERE A.SALFCY_0=@site AND A.SOHNUM_0=@orderNo
+      WHERE  A.SOHNUM_0=@orderNo
     `);
 
   return {
@@ -408,7 +408,7 @@ async getAllInvoices(user) {
              A.AMTATI_0, A.AMTNOT_0,
              A.INVSTA_0, A.FCY_0
       FROM tbs.TMSNEW.SINVOICE A
-      WHERE A.FCY_0=@site AND A.BPR_0=@x3user
+      WHERE  A.BPR_0=@x3user
       ORDER BY A.INVDAT_0 DESC
     `);
 
@@ -462,8 +462,7 @@ async getPendingInvoices(user) {
              A.INVSTA_0, STRDUDDAT_0
       FROM tbs.TMSNEW.SINVOICE A
       LEFT JOIN tbs.TMSNEW.GACCDUDATE B ON A.NUM_0 = B.NUM_0
-      WHERE A.FCY_0=@site
-        AND A.BPR_0=@x3user
+      WHERE  A.BPR_0=@x3user
         AND B.FLGCLE_0 = 1
       ORDER BY STRDUDDAT_0 DESC
     `);
@@ -486,7 +485,7 @@ async getAllPayments(user) {
              A.CUR_0, A.AMTCUR_0,
              A.DUDDAT_0
       FROM tbs.TMSNEW.PAYMENTH A
-      WHERE A.FCY_0=@site AND A.BPR_0=@x3user
+      WHERE  A.BPR_0=@x3user
       ORDER BY A.ACCDAT_0 DESC
     `);
 
@@ -500,7 +499,7 @@ async getAllPayments(user) {
         FROM tbs.TMSNEW.PAYMENTD A
         LEFT JOIN tbs.TMSNEW.PAYMENTH B
           ON A.NUM_0 = B.NUM_0
-        WHERE B.FCY_0=@site AND A.NUM_0=@paymentno
+        WHERE  A.NUM_0=@paymentno
       `);
 
     row.details = details.recordset;
@@ -534,7 +533,7 @@ async getPaymentDetail(id, user) {
       FROM tbs.TMSNEW.PAYMENTD A
       LEFT JOIN tbs.TMSNEW.PAYMENTH B
         ON A.NUM_0 = B.NUM_0
-      WHERE B.FCY_0=@site AND A.NUM_0=@orderNo
+      WHERE  A.NUM_0=@orderNo
     `);
 
   return {
@@ -559,8 +558,7 @@ async getPaymentPendingInvoices(user) {
       FROM tbs.TMSNEW.SINVOICE A
       LEFT JOIN tbs.TMSNEW.GACCDUDATE B
         ON A.NUM_0 = B.NUM_0
-      WHERE A.FCY_0=@site
-        AND A.BPR_0=@x3user
+      WHERE A.BPR_0=@x3user
         AND B.FLGCLE_0 = 1
       ORDER BY STRDUDDAT_0 DESC
     `);

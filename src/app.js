@@ -27,7 +27,7 @@ app.use("/erp", require("./routes/erp.routes"));
 app.use("/api/chat", chatRoutes);
 app.use("/cart", cartRoutes);
 
-app.use("/sorder", salesOrderRoutes);
+app.use("/orders", salesOrderRoutes);
 app.use("/sinvoice", salesInvoiceRoutes);
 app.use("/squote", salesQuoteRoutes);
 app.use("/payment", PaymentRoutes);
