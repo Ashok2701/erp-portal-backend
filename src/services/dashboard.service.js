@@ -5,19 +5,23 @@ exports.getAdminStats = async () => {
 
   // ---------- USERS ----------
   const usersTotal = await db.query(`SELECT COUNT(*) FROM users`);
-  const usersActive = await db.query(`SELECT COUNT(*) FROM users WHERE status='ACTIVE'`);
+  const usersActive = await db.query(`SELECT COUNT(*) FROM users WHERE is_active = true`);
 
   const usersByRole = await db.query(`
-    SELECT role, COUNT(*) 
-    FROM users 
-    GROUP BY role
+    SELECT 
+  r.role_name AS role,
+  COUNT(u.user_id) AS count
+FROM users u
+JOIN user_roles ur ON u.user_id = ur.user_id
+JOIN roles r ON ur.role_id = r.role_id
+GROUP BY r.role_name
   `);
 
   // ---------- MODULES ----------
   const modules = await db.query(`
     SELECT 
       COUNT(*) as total,
-      COUNT(*) FILTER (WHERE status='ACTIVE') as active
+      COUNT(*) FILTER (WHERE is_active = true) as active
     FROM modules
   `);
 
@@ -25,7 +29,7 @@ exports.getAdminStats = async () => {
   const roles = await db.query(`
     SELECT 
       COUNT(*) as total,
-      COUNT(*) FILTER (WHERE status='ACTIVE') as active
+      COUNT(*) FILTER (WHERE is_active = true) as active
     FROM roles
   `);
 
@@ -44,20 +48,20 @@ exports.getAdminStats = async () => {
   const lowStock = stock.filter(s => s.stock_qty < 10);
 
   // ---------- ORDERS ----------
-  const ordersTotal = await db.query(`SELECT COUNT(*) FROM sales_request`);
+  const ordersTotal = await db.query(`SELECT COUNT(*) FROM sales_requests`);
   const ordersToday = await db.query(`
-    SELECT COUNT(*) FROM sales_request 
+    SELECT COUNT(*) FROM sales_requests 
     WHERE DATE(created_at) = CURRENT_DATE
   `);
 
   const ordersPending = await db.query(`
-    SELECT COUNT(*) FROM sales_request 
+    SELECT COUNT(*) FROM sales_requests 
     WHERE status='CREATED'
   `);
 
   const ordersByStatus = await db.query(`
     SELECT status, COUNT(*) 
-    FROM sales_request 
+    FROM sales_requests 
     GROUP BY status
   `);
 
