@@ -47,6 +47,29 @@ exports.createContent = async (user, body) => {
   }
 };
 
+
+exports.getAllContent = async (user) => {
+
+  const result = await db.query(
+    `
+    SELECT c.*, uc.status, uc.viewed_at, uc.signed_at
+    FROM content c
+    LEFT JOIN content_targets ct ON c.id = ct.content_id
+    LEFT JOIN user_content uc 
+      ON uc.content_id = c.id 
+    WHERE 
+      ct.target_type = 'ALL'
+      OR (ct.target_type = 'USER')
+      OR (ct.target_type = 'ROLE')
+    ORDER BY c.created_at DESC
+    `
+  );
+
+  return result.rows;
+};
+
+
+
 exports.getFeed = async (user) => {
 
   const result = await db.query(

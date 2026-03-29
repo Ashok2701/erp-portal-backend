@@ -9,6 +9,11 @@ exports.createContent = async (req, res) => {
   }
 };
 
+exports.getAllContent = async (req, res) => {
+  const data = await service.getAllContent(req.user);
+  res.json({ success: true, data });
+};
+
 
 exports.getFeed = async (req, res) => {
   const data = await service.getFeed(req.user);
