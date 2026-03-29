@@ -349,10 +349,16 @@ async getAllOrders(user) {
 
   const pool = await sql.connect(config);
 
+    const { tenant_id } = user;
+   
+       // check duplicate
+  const getuserinfo = await UserModel.getUserById(user.user_id);
+
     console.log("User details", user)
-     console.log("User details", user.erp_entity_code)
+     console.log("User details", getuserinfo)
+     console.log("User details", getuserinfo.erp_entity_code)
   const result = await pool.request()
-    .input("x3user", sql.NVarChar, user.erp_entity_code)
+    .input("x3user", sql.NVarChar, getuserinfo.erp_entity_code)
     .query(`
       SELECT A.SALFCY_0, A.ORDINVATI_0, A.CUR_0,
              A.CUSORDREF_0, A.BPCORD_0, A.BPCNAM_0,
