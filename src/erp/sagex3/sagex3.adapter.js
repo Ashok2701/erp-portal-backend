@@ -349,9 +349,10 @@ async getAllOrders(user) {
 
   const pool = await sql.connect(config);
 
+    console.log("User details", user)
+     console.log("User details", user.erp_entity_code)
   const result = await pool.request()
-    .input("x3user", sql.NVarChar, user.erp_customer_code)
-    .input("site", sql.NVarChar, user.site)
+    .input("x3user", sql.NVarChar, user.erp_entity_code)
     .query(`
       SELECT A.SALFCY_0, A.ORDINVATI_0, A.CUR_0,
              A.CUSORDREF_0, A.BPCORD_0, A.BPCNAM_0,

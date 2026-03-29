@@ -11,6 +11,6 @@ router.get("/feed", auth, ctrl.getFeed);
 router.post("/:id/view", auth, ctrl.markViewed);
 router.post("/:id/sign", auth, ctrl.markSigned);
 router.post("/message", auth, ctrl.sendMessage);
-router.get("/", auth, ctrl.getFeed);
+router.get("/", auth, ctrl.getAllContent);
 
 module.exports = router;
