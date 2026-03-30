@@ -79,3 +79,26 @@ exports.getContentById = async (req, res) => {
     });
   }
 };
+
+
+exports.updateContent = async (req, res) => {
+  try {
+    const data = await service.updateContent(
+      req.user,
+      req.params.id,
+      req.body
+    );
+
+    res.json({
+      success: true,
+      data
+    });
+
+  } catch (err) {
+    console.error("UPDATE ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};

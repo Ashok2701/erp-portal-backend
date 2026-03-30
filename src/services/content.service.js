@@ -192,3 +192,42 @@ exports.getContentById = async (user, contentId) => {
 
   return result.rows[0];
 };
+
+
+exports.updateContent = async (user, contentId, body) => {
+
+  // 🔐 Optional: only creator/admin can update
+  const existing = await db.query(
+    `SELECT * FROM content WHERE id = $1`,
+    [contentId]
+  );
+
+  if (existing.rows.length === 0) {
+    throw new Error("Content not found");
+  }
+
+  // 🔥 Update content
+  const result = await db.query(
+    `
+    UPDATE content
+    SET
+      title = COALESCE($1, title),
+      message = COALESCE($2, message),
+      type = COALESCE($3, type),
+      priority = COALESCE($4, priority),
+      expiry_date = COALESCE($5, expiry_date)
+    WHERE id = $6
+    RETURNING *
+    `,
+    [
+      body.title,
+      body.message,
+      body.type,
+      body.priority,
+      body.expiry_date,
+      contentId
+    ]
+  );
+
+  return result.rows[0];
+};
