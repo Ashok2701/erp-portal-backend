@@ -154,3 +154,41 @@ exports.sendMessage = async (user, body) => {
     client.release();
   }
 };
+
+exports.getContentById = async (user, contentId) => {
+
+  const result = await db.query(
+    `
+    SELECT DISTINCT
+      c.*,
+      COALESCE(uc.status, 'NEW') AS status,
+      uc.viewed_at,
+      uc.signed_at
+
+    FROM content c
+
+    JOIN content_targets ct
+      ON c.id = ct.content_id
+
+    LEFT JOIN user_content uc
+      ON uc.content_id = c.id
+      AND uc.user_id = $1
+
+    WHERE
+      c.id = $2
+
+      AND (
+        ct.target_type = 'ALL'
+        OR (ct.target_type = 'USER' AND ct.target_value = $1::text)
+        OR (ct.target_type = 'ROLE' AND LOWER(ct.target_value) = LOWER($3))
+      )
+    `,
+    [user.id, contentId, user.role]
+  );
+
+  if (result.rows.length === 0) {
+    throw new Error("Content not found or not authorized");
+  }
+
+  return result.rows[0];
+};

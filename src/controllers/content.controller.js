@@ -37,7 +37,7 @@ exports.createContent = async (req, res) => {
 };
 
 exports.getAllContent = async (req, res) => {
-  const data = await service.getAllContent(req.user);
+  const data = await service.getFeed(req.user);
   res.json({ success: true, data });
 };
 
@@ -60,4 +60,22 @@ exports.markSigned = async (req, res) => {
 exports.sendMessage = async (req, res) => {
   const data = await service.sendMessage(req.user, req.body);
   res.json({ success: true, data });
+};
+
+exports.getContentById = async (req, res) => {
+  try {
+    const data = await service.getContentById(req.user, req.params.id);
+
+    res.json({
+      success: true,
+      data
+    });
+
+  } catch (err) {
+    console.error("GET CONTENT ERROR:", err);
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
 };
