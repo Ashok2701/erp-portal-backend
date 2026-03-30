@@ -10,7 +10,7 @@ exports.createContent = async (user, body) => {
     const contentRes = await client.query(
       `INSERT INTO content
        (title, message, type, file_url,file_name,file_type, priority, expiry_date, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       VALUES ($1,$2,$3,$4,$5,$6,$7, $8, $9)
        RETURNING *`,
       [
         body.title,
