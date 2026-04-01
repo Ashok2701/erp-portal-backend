@@ -252,10 +252,16 @@ async getAllQuotes(user) {
     },
      };
   const pool = await sql.connect(config);
+      const { tenant_id } = user;
 
-  const result = await pool.request()
-    .input("x3user", sql.NVarChar, user.erp_customer_code)
-    .input("site", sql.NVarChar, user.site)
+         // check duplicate
+    const getuserinfo = await UserModel.getUserById(user.user_id);
+
+      console.log("User details", user)
+       console.log("User details", getuserinfo)
+       console.log("User details", getuserinfo[0].erp_entity_code)
+    const result = await pool.request()
+      .input("x3user", sql.NVarChar, getuserinfo[0].erp_entity_code)
     .query(`
       SELECT A.SQHNUM_0, A.SQHTYP_0, A.QUOINVATI_0, D.TEXTE_0, A.QUODAT_0,
              A.CUSQUOREF_0, A.QUOSTA_0, A.FFWNUM_0, B.BPTNAM_0,
@@ -462,18 +468,24 @@ async getAllInvoices(user) {
 
 
   const pool = await sql.connect(config);
+   const { tenant_id } = user;
 
-  const result = await pool.request()
-    .input("x3user", sql.NVarChar, user.erp_customer_code)
-    .input("site", sql.NVarChar, user.site)
+           // check duplicate
+      const getuserinfo = await UserModel.getUserById(user.user_id);
+
+        console.log("User details", user)
+         console.log("User details", getuserinfo)
+         console.log("User details", getuserinfo[0].erp_entity_code)
+      const result = await pool.request()
+        .input("x3user", sql.NVarChar, getuserinfo[0].erp_entity_code)
     .query(`
       SELECT A.NUM_0, A.SIVTYP_0, A.BPR_0,
-             A.INVDAT_0, A.CUR_0,
+             A.ACCDAT_0, A.CUR_0,
              A.AMTATI_0, A.AMTNOT_0,
-             A.INVSTA_0, A.FCY_0
+             A.STA_0, A.FCY_0
       FROM tbs.TMSNEW.SINVOICE A
       WHERE  A.BPR_0=@x3user
-      ORDER BY A.INVDAT_0 DESC
+      ORDER BY A.ACCDAT_0 DESC
     `);
 
   return result.recordset;
@@ -484,6 +496,7 @@ async getInvoiceDetail(id, user) {
 
   const sql = require("mssql");
   const pool = await sql.connect(this.config);
+
 
   const headerRes = await pool.request()
     .input("invoiceNo", sql.NVarChar, id)
@@ -529,14 +542,20 @@ async getPendingInvoices(user) {
    };
 
   const pool = await sql.connect(config);
+   const { tenant_id } = user;
 
-  const result = await pool.request()
-    .input("x3user", sql.NVarChar, user.erp_customer_code)
-    .input("site", sql.NVarChar, user.site)
+             // check duplicate
+        const getuserinfo = await UserModel.getUserById(user.user_id);
+
+          console.log("User details", user)
+           console.log("User details", getuserinfo)
+           console.log("User details", getuserinfo[0].erp_entity_code)
+        const result = await pool.request()
+          .input("x3user", sql.NVarChar, getuserinfo[0].erp_entity_code)
     .query(`
-      SELECT DISTINCT A.NUM_0, A.INVDAT_0,
+      SELECT DISTINCT A.NUM_0, A.ACCDAT_0,
              A.AMTATI_0, A.CUR_0,
-             A.INVSTA_0, STRDUDDAT_0
+             A.STA_0, STRDUDDAT_0
       FROM tbs.TMSNEW.SINVOICE A
       LEFT JOIN tbs.TMSNEW.GACCDUDATE B ON A.NUM_0 = B.NUM_0
       WHERE  A.BPR_0=@x3user
@@ -565,10 +584,17 @@ async getAllPayments(user) {
    };
 
   const pool = await sql.connect(config);
+   const { tenant_id } = user;
 
-  const result = await pool.request()
-    .input("x3user", sql.NVarChar, user.erp_customer_code)
-    .input("site", sql.NVarChar, user.site)
+             // check duplicate
+        const getuserinfo = await UserModel.getUserById(user.user_id);
+
+          console.log("User details", user)
+           console.log("User details", getuserinfo)
+           console.log("User details", getuserinfo[0].erp_entity_code)
+        const result = await pool.request()
+          .input("x3user", sql.NVarChar, getuserinfo[0].erp_entity_code)
+
     .query(`
       SELECT A.NUM_0, A.STA_0, A.FCY_0,
              A.BPR_0, A.ACCDAT_0,
@@ -582,7 +608,6 @@ async getAllPayments(user) {
   for (const row of result.recordset) {
 
     const details = await pool.request()
-      .input("site", sql.NVarChar, user.site)
       .input("paymentno", sql.NVarChar, row.NUM_0)
       .query(`
         SELECT A.VCRNUM_0, A.AMTLIN_0, B.CUR_0
@@ -662,10 +687,16 @@ async getPaymentPendingInvoices(user) {
    };
 
   const pool = await sql.connect(config);
+const { tenant_id } = user;
 
-  const result = await pool.request()
-    .input("x3user", sql.NVarChar, user.erp_customer_code)
-    .input("site", sql.NVarChar, user.site)
+           // check duplicate
+      const getuserinfo = await UserModel.getUserById(user.user_id);
+
+        console.log("User details", user)
+         console.log("User details", getuserinfo)
+         console.log("User details", getuserinfo[0].erp_entity_code)
+      const result = await pool.request()
+        .input("x3user", sql.NVarChar, getuserinfo[0].erp_entity_code)
     .query(`
       SELECT A.NUM_0, A.INVDAT_0,
              A.AMTATI_0, A.CUR_0,
