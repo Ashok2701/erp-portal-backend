@@ -1,4 +1,4 @@
-const db = require("../config/");
+const db = require("../config/db");
 const UserModel  = require("../models/user.model");
 
 function resolveContext(user, body) {
