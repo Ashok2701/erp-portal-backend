@@ -1,4 +1,5 @@
-const db = require("../config/db");
+const db = require("../config/");
+const UserModel  = require("../models/user.model");
 
 function resolveContext(user, body) {
   let partyId, partyType, erpCustomerCode, erpSupplierCode;
@@ -90,66 +91,101 @@ exports.getCart = async (user) => {
 
 
 exports.addToCart = async (user, body) => {
+  const client = await db.connect();
+ 
+   console.log("user details", user);
 
-  const ctx = resolveContext(user, body);
+    const getuserinfo = await UserModel.getUserById(user.user_id);
+    const getUserdata = getuserinfo[0];
 
-  // 1. find or create cart
-  let cartRes = await db.query(
-    `SELECT * FROM cart 
-     WHERE actor_id=$1 AND party_id=$2 AND status='ACTIVE'`,
-    [ctx.actorId, ctx.partyId]
-  );
+    if(getUserdata.erp_entity_type === 'supplier') {
+      body.erp_supplier_code  =  getUserdata.erp_entity_code
+    }
+    else if(getUserdata.erp_entity_type === 'customer') {
+     body.erp_customer_code =  getUserdata.erp_entity_code
+    }
 
-  let cart;
+   console.log("user details body", body);
 
-  if (cartRes.rows.length === 0) {
-    const insert = await db.query(
-      `INSERT INTO cart 
-       (actor_type, actor_id, party_type, party_id, erp_customer_code, erp_supplier_code)
-       VALUES ($1,$2,$3,$4,$5,$6)
-       RETURNING *`,
-      [
-        ctx.actorType,
-        ctx.actorId,
-        ctx.partyType,
-        ctx.partyId,
-        ctx.erpCustomerCode,
-        ctx.erpSupplierCode
-      ]
+      console.log("user details getuserinfo", getuserinfo);
+   
+   console.log("user details getUserdata", getUserdata);
+      
+  try {
+    await client.query("BEGIN");
+
+    // 🔥 1. Find existing cart
+    let cartRes = await client.query(
+      `SELECT * FROM cart 
+       WHERE actor_id=$1 AND actor_type=$2 AND status='ACTIVE'`,
+      [user.id, user.role]
     );
 
-    cart = insert.rows[0];
-  } else {
-    cart = cartRes.rows[0];
+    let cart;
+
+    if (cartRes.rows.length === 0) {
+      // 🔥 Create new cart
+      const newCart = await client.query(
+        `INSERT INTO cart 
+        (actor_id, actor_type, party_type, party_id, erp_customer_code, erp_supplier_code, status)
+        VALUES ($1,$2,$3,$4,$5,$6,'ACTIVE')
+        RETURNING *`,
+        [
+          getUserdata.user_id,
+          getUserdata.erp_entity_type,
+          body.party_type || getUserdata.erp_entity_type,
+          body.party_id || getUserdata.user_id,
+          body.erp_customer_code || null,
+          body.erp_supplier_code  ||  null
+        ]
+      );
+
+      cart = newCart.rows[0];
+    } else {
+      cart = cartRes.rows[0];
+    }
+
+    // 🔥 2. Check if item exists
+    const itemRes = await client.query(
+      `SELECT * FROM cart_items 
+       WHERE cart_id=$1 AND product_code=$2`,
+      [cart.id, body.product_code]
+    );
+
+    if (itemRes.rows.length > 0) {
+      // 🔁 Update qty
+      await client.query(
+        `UPDATE cart_items
+         SET quantity = quantity + $1,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [body.quantity, itemRes.rows[0].id]
+      );
+    } else {
+      // ➕ Insert new item
+      await client.query(
+        `INSERT INTO cart_items
+        (cart_id, product_code, product_name, quantity, uom, price)
+        VALUES ($1,$2,$3,$4,$5,$6)`,
+        [
+          cart.id,
+          body.product_code,
+          body.product_name,
+          body.quantity,
+          body.uom,
+          body.price
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    return { message: "Added to cart" };
+
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
   }
-
-  // 2. check existing item
-  const item = await db.query(
-    `SELECT * FROM cart_items WHERE cart_id=$1 AND product_code=$2`,
-    [cart.id, body.product_code]
-  );
-
-  if (item.rows.length > 0) {
-    await db.query(
-      `UPDATE cart_items 
-       SET quantity = quantity + $1 
-       WHERE id=$2`,
-      [body.quantity, item.rows[0].id]
-    );
-  } else {
-    await db.query(
-      `INSERT INTO cart_items 
-       (cart_id, product_code, product_name, quantity, uom)
-       VALUES ($1,$2,$3,$4,$5)`,
-      [
-        cart.id,
-        body.product_code,
-        body.product_name,
-        body.quantity,
-        body.uom
-      ]
-    );
-  }
-
-  return { message: "Item added to cart" };
 };

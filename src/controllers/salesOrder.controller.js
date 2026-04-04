@@ -2,6 +2,7 @@ const service = require("../services/salesOrder.service");
 
 exports.getAll = async (req, res) => {
   try {
+    
     const data = await service.getAll(req.user);
     res.json({ success: true, data });
   } catch (err) {
