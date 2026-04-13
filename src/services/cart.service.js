@@ -63,8 +63,22 @@ exports.updateItem = async (itemId, body) => {
   return { message: "Updated" };
 };
 
-
 exports.getCart = async (user) => {
+
+   const result = await db.query(
+     `SELECT ci.*, c.id as cart_id
+      FROM cart c
+      JOIN cart_items ci ON ci.cart_id = c.id
+      WHERE c.actor_id = $1 AND c.status = 'ACTIVE'`,
+     [user.userId]
+   );
+
+   return {
+     items: result.rows
+   };
+ };
+
+exports.getCart_old = async (user) => {
 
   const cartRes = await db.query(
     `SELECT * FROM cart 
@@ -93,7 +107,7 @@ exports.getCart = async (user) => {
 exports.addToCart = async (user, body) => {
   const client = await db.connect();
  
-   console.log("user details", user);
+   console.log("user details 96", user);
 
     const getuserinfo = await UserModel.getUserById(user.user_id);
     const getUserdata = getuserinfo[0];
@@ -118,7 +132,7 @@ exports.addToCart = async (user, body) => {
     let cartRes = await client.query(
       `SELECT * FROM cart 
        WHERE actor_id=$1 AND actor_type=$2 AND status='ACTIVE'`,
-      [user.id, user.role]
+      [getUserdata.user_id, getUserdata.erp_entity_type]
     );
 
     let cart;
