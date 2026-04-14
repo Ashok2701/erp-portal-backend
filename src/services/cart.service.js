@@ -9,7 +9,7 @@ function resolveContext(req) {
 
   if (role === 'customer') {
     return {
-      actor_id: req.user?.user_id,,
+      actor_id: req.user?.user_id,
       actor_type: 'customer',
       party_id: party_id,
       party_type: party_type,
@@ -18,7 +18,7 @@ function resolveContext(req) {
   }
    if (role === 'supplier') {
       return {
-        actor_id: req.user?.user_id,,
+        actor_id: req.user?.user_id,
         actor_type: 'supplier',
         party_id: party_id,
         party_type: party_type,
@@ -35,7 +35,7 @@ function resolveContext(req) {
     }
 
     return {
-      actor_id: req.user?.user_id,,
+      actor_id: req.user?.user_id,
       actor_type: 'salesrep',
       party_id,
       party_type,
