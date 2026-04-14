@@ -1,39 +1,34 @@
 const db = require("../config/db");
 const UserModel  = require("../models/user.model");
 
-function resolveContext(user, body) {
-  let partyId, partyType, erpCustomerCode, erpSupplierCode;
 
-  if (user.role === "CUSTOMER") {
-    partyId = user.userId;
-    partyType = "CUSTOMER";
-    erpCustomerCode = user.erp_customer_code;
+function resolveContext(user, input) {
 
-  } else if (user.role === "SALESREP") {
-    if (!body.customer_id) {
-      throw new Error("customer_id is required");
-    }
-
-    partyId = body.customer_id;
-    partyType = "CUSTOMER";
-
-    // fetch ERP code from mapping table if needed
-    erpCustomerCode = body.erp_customer_code || null;
-
-  } else if (user.role === "SUPPLIER") {
-    partyId = user.userId;
-    partyType = "SUPPLIER";
-    erpSupplierCode = user.erp_supplier_code;
+  // Customer
+  if (user.role === 'customer') {
+    return {
+      actor_id: user.id,
+      actor_type: 'customer',
+      party_id: user.id,
+      party_type: 'customer'
+    };
   }
 
-  return {
-    actorId: user.userId,
-    actorType: user.role,
-    partyId,
-    partyType,
-    erpCustomerCode,
-    erpSupplierCode
-  };
+  // Sales Rep
+  if (user.role === 'salesrep') {
+    if (!input.party_id || !input.party_type) {
+      throw new Error('Customer/Supplier must be selected');
+    }
+
+    return {
+      actor_id: user.id,              // 🔥 LOGGED IN USER
+      actor_type: 'salesrep',
+      party_id: input.party_id,       // 🔥 SELECTED CUSTOMER
+      party_type: input.party_type
+    };
+  }
+
+  throw new Error('Invalid role');
 }
 
 exports.clearCart = async (user) => {
@@ -63,141 +58,93 @@ exports.updateItem = async (itemId, body) => {
   return { message: "Updated" };
 };
 
-exports.getCart = async (user) => {
+exports.getCart = async (user, query) => {
+  const context = resolveContext(user, query);
 
-   const result = await db.query(
-     `SELECT ci.*, c.id as cart_id
-      FROM cart c
-      JOIN cart_items ci ON ci.cart_id = c.id
-      WHERE c.actor_id = $1 AND c.status = 'ACTIVE'`,
-     [user.userId]
-   );
-
-   return {
-     items: result.rows
-   };
- };
-
-exports.getCart_old = async (user) => {
-
-  const cartRes = await db.query(
-    `SELECT * FROM cart 
-     WHERE actor_id=$1 AND status='ACTIVE'`,
-    [user.userId]
+  const cart = await db.query(
+    `SELECT * FROM cart
+     WHERE actor_id=$1
+       AND actor_type=$2
+       AND party_id=$3
+       AND party_type=$4
+       AND status='ACTIVE'`,
+    [
+      context.actor_id,
+      context.actor_type,
+      context.party_id,
+      context.party_type
+    ]
   );
 
-  if (cartRes.rows.length === 0) {
+  if (cart.rows.length === 0) {
     return { items: [] };
   }
 
-  const cart = cartRes.rows[0];
-
   const items = await db.query(
     `SELECT * FROM cart_items WHERE cart_id=$1`,
-    [cart.id]
+    [cart.rows[0].id]
   );
 
   return {
-    cart,
+    cart: cart.rows[0],
     items: items.rows
   };
 };
 
+ async function getOrCreateCart(client, context) {
+   const { actor_id, actor_type, party_id, party_type } = context;
+
+   const existing = await client.query(
+     `SELECT * FROM cart
+      WHERE actor_id=$1
+        AND actor_type=$2
+        AND party_id=$3
+        AND party_type=$4
+        AND status='ACTIVE'
+      LIMIT 1`,
+     [actor_id, actor_type, party_id, party_type]
+   );
+
+   if (existing.rows.length > 0) return existing.rows[0];
+
+   const created = await client.query(
+     `INSERT INTO cart (actor_id, actor_type, party_id, party_type, status)
+      VALUES ($1,$2,$3,$4,'ACTIVE')
+      RETURNING *`,
+     [actor_id, actor_type, party_id, party_type]
+   );
+
+   return created.rows[0];
+ }
+
 
 exports.addToCart = async (user, body) => {
   const client = await db.connect();
- 
-   console.log("user details 96", user);
 
-    const getuserinfo = await UserModel.getUserById(user.user_id);
-    const getUserdata = getuserinfo[0];
-
-    if(getUserdata.erp_entity_type === 'supplier') {
-      body.erp_supplier_code  =  getUserdata.erp_entity_code
-    }
-    else if(getUserdata.erp_entity_type === 'customer') {
-     body.erp_customer_code =  getUserdata.erp_entity_code
-    }
-
-   console.log("user details body", body);
-
-      console.log("user details getuserinfo", getuserinfo);
-   
-   console.log("user details getUserdata", getUserdata);
-      
   try {
-    await client.query("BEGIN");
+    await client.query('BEGIN');
 
-    // 🔥 1. Find existing cart
-    let cartRes = await client.query(
-      `SELECT * FROM cart 
-       WHERE actor_id=$1 AND actor_type=$2 AND status='ACTIVE'`,
-      [getUserdata.user_id, getUserdata.erp_entity_type]
+    const context = resolveContext(user, body);
+    const cart = await getOrCreateCart(client, context);
+
+    const { product_code, product_name, quantity, uom, price } = body;
+
+    await client.query(
+      `INSERT INTO cart_items (cart_id, product_code, product_name, quantity, uom, price)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (cart_id, product_code)
+       DO UPDATE SET
+         quantity = cart_items.quantity + EXCLUDED.quantity,
+         updated_at = NOW()`,
+      [cart.id, product_code, product_name, quantity, uom, price]
     );
 
-    let cart;
+    await client.query('COMMIT');
 
-    if (cartRes.rows.length === 0) {
-      // 🔥 Create new cart
-      const newCart = await client.query(
-        `INSERT INTO cart 
-        (actor_id, actor_type, party_type, party_id, erp_customer_code, erp_supplier_code, status)
-        VALUES ($1,$2,$3,$4,$5,$6,'ACTIVE')
-        RETURNING *`,
-        [
-          getUserdata.user_id,
-          getUserdata.erp_entity_type,
-          body.party_type || getUserdata.erp_entity_type,
-          body.party_id || getUserdata.user_id,
-          body.erp_customer_code || null,
-          body.erp_supplier_code  ||  null
-        ]
-      );
-
-      cart = newCart.rows[0];
-    } else {
-      cart = cartRes.rows[0];
-    }
-
-    // 🔥 2. Check if item exists
-    const itemRes = await client.query(
-      `SELECT * FROM cart_items 
-       WHERE cart_id=$1 AND product_code=$2`,
-      [cart.id, body.product_code]
-    );
-
-    if (itemRes.rows.length > 0) {
-      // 🔁 Update qty
-      await client.query(
-        `UPDATE cart_items
-         SET quantity = quantity + $1,
-             updated_at = NOW()
-         WHERE id = $2`,
-        [body.quantity, itemRes.rows[0].id]
-      );
-    } else {
-      // ➕ Insert new item
-      await client.query(
-        `INSERT INTO cart_items
-        (cart_id, product_code, product_name, quantity, uom, price)
-        VALUES ($1,$2,$3,$4,$5,$6)`,
-        [
-          cart.id,
-          body.product_code,
-          body.product_name,
-          body.quantity,
-          body.uom,
-          body.price
-        ]
-      );
-    }
-
-    await client.query("COMMIT");
-
-    return { message: "Added to cart" };
+    return { message: 'Added to cart' };
 
   } catch (err) {
-    await client.query("ROLLBACK");
+    await client.query('ROLLBACK');
     throw err;
   } finally {
     client.release();
