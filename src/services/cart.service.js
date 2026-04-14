@@ -7,7 +7,7 @@ function resolveContext(req) {
     const party_id = req.body?.party_id || req.query?.party_id || req.user?.user_id;
 
 
-  if (role === 'customer') {
+  if (party_type === 'CUSTOMER' || party_type === 'customer') {
     return {
       actor_id: req.user?.user_id,
       actor_type: 'customer',
@@ -16,7 +16,7 @@ function resolveContext(req) {
       tenant_id : req.user?.tenant_id
     };
   }
-   if (role === 'supplier') {
+   if (party_type === 'SUPPLIER' || party_type === 'supplier') {
       return {
         actor_id: req.user?.user_id,
         actor_type: 'supplier',
@@ -26,7 +26,7 @@ function resolveContext(req) {
       };
     }
 
-  if (role === 'salesrep') {
+  if (party_type === 'salesrep' || party_type === 'SALESREP') {
    // const party_id = req.body?.party_id || req.query?.party_id;
    // const party_type = req.body?.party_type || req.query?.party_type;
 
@@ -145,7 +145,7 @@ exports.addToCart = async (req) => {
     const context = resolveContext(req);
     const cart = await getOrCreateCart(client, context);
 
-    const { product_code, product_name, quantity, uom, price } = body;
+    const { product_code, product_name, quantity, uom, price } = req.body;
 
     await client.query(
       `INSERT INTO cart_items (cart_id, product_code, product_name, quantity, uom, price)
