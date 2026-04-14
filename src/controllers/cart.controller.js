@@ -10,7 +10,7 @@ exports.addToCart = async (req, res) => {
 };
 
 exports.getCart = async (req, res) => {
-  const data = await cartService.getCart(req.user);
+  const data = await cartService.getCart(req);
   res.json({ success: true, data });
 };
 
@@ -30,5 +30,9 @@ exports.clearCart = async (req, res) => {
 };
 
 exports.checkout = async (req, res) => {
-  res.json(await service.checkout(req.user, req.body));
+  try {
+    res.json(await cartService.checkout(req.user, req.body));  // ✅ 'cartService'
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
 };
