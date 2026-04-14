@@ -1,30 +1,42 @@
 const db = require("../config/db");
 const UserModel  = require("../models/user.model");
 
+function resolveContext(req) {
+  const { user_id, tenant_id, role } = req.user;
 
-function resolveContext(user, input) {
-
-  // Customer
-  if (user.role === 'customer') {
+  if (role === 'customer') {
     return {
-      actor_id: user.id,
+      actor_id: user_id,
       actor_type: 'customer',
-      party_id: user.id,
-      party_type: 'customer'
+      party_id: user_id,
+      party_type: 'customer',
+      tenant_id
     };
   }
+   if (role === 'supplier') {
+      return {
+        actor_id: user_id,
+        actor_type: 'supplier',
+        party_id: user_id,
+        party_type: 'supplier',
+        tenant_id
+      };
+    }
 
-  // Sales Rep
-  if (user.role === 'salesrep') {
-    if (!input.party_id || !input.party_type) {
-      throw new Error('Customer/Supplier must be selected');
+  if (role === 'salesrep') {
+    const party_id = req.body?.party_id || req.query?.party_id;
+    const party_type = req.body?.party_type || req.query?.party_type;
+
+    if (!party_id || !party_type) {
+      throw new Error('party selection required');
     }
 
     return {
-      actor_id: user.id,              // 🔥 LOGGED IN USER
+      actor_id: user_id,
       actor_type: 'salesrep',
-      party_id: input.party_id,       // 🔥 SELECTED CUSTOMER
-      party_type: input.party_type
+      party_id,
+      party_type,
+      tenant_id
     };
   }
 
