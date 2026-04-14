@@ -2,7 +2,7 @@ const cartService = require("../services/cart.service");
 
 exports.addToCart = async (req, res) => {
   try {
-    const data = await cartService.addToCart(req.user, req.body);
+    const data = await cartService.addToCart(req);
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -25,13 +25,13 @@ exports.deleteItem = async (req, res) => {
 };
 
 exports.clearCart = async (req, res) => {
-  await cartService.clearCart(req.user);
+  await cartService.clearCart(req);
   res.json({ success: true });
 };
 
 exports.checkout = async (req, res) => {
   try {
-    res.json(await cartService.checkout(req.user, req.body));  // ✅ 'cartService'
+    res.json(await cartService.checkout(req));  // ✅ 'cartService'
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

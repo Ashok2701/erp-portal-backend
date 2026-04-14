@@ -2,49 +2,52 @@ const db = require("../config/db");
 const UserModel  = require("../models/user.model");
 
 function resolveContext(req) {
-  const { user_id, tenant_id, role } = req.user;
+  //const { user_id, tenant_id, role } = req.user;
+   const party_type = req.body?.party_type || req.query?.party_type || 'customer';
+    const party_id = req.body?.party_id || req.query?.party_id || req.user?.user_id;
+
 
   if (role === 'customer') {
     return {
-      actor_id: user_id,
+      actor_id: req.user?.user_id,,
       actor_type: 'customer',
-      party_id: user_id,
-      party_type: 'customer',
-      tenant_id
+      party_id: party_id,
+      party_type: party_type,
+      tenant_id : req.user?.tenant_id
     };
   }
    if (role === 'supplier') {
       return {
-        actor_id: user_id,
+        actor_id: req.user?.user_id,,
         actor_type: 'supplier',
-        party_id: user_id,
-        party_type: 'supplier',
-        tenant_id
+        party_id: party_id,
+        party_type: party_type,
+        tenant_id : req.user?.tenant_id
       };
     }
 
   if (role === 'salesrep') {
-    const party_id = req.body?.party_id || req.query?.party_id;
-    const party_type = req.body?.party_type || req.query?.party_type;
+   // const party_id = req.body?.party_id || req.query?.party_id;
+   // const party_type = req.body?.party_type || req.query?.party_type;
 
     if (!party_id || !party_type) {
       throw new Error('party selection required');
     }
 
     return {
-      actor_id: user_id,
+      actor_id: req.user?.user_id,,
       actor_type: 'salesrep',
       party_id,
       party_type,
-      tenant_id
+      tenant_id : req.user?.tenant_id
     };
   }
 
   throw new Error('Invalid role');
 }
 
-exports.clearCart = async (user, query) => {
-  const ctx = resolveContext(user, query);
+exports.clearCart = async (req) => {
+  const ctx = resolveContext(req);
 
   const cart = await db.query(
     `SELECT id FROM cart WHERE actor_id=$1 AND party_id=$2 AND status='ACTIVE'`,
@@ -73,8 +76,8 @@ exports.updateItem = async (itemId, body) => {
   return { message: "Updated" };
 };
 
-exports.getCart = async (user, query) => {
-  const context = resolveContext(user, query);
+exports.getCart = async (req) => {
+  const context = resolveContext(req);
 
   const cart = await db.query(
     `SELECT * FROM cart
@@ -133,13 +136,13 @@ exports.getCart = async (user, query) => {
  }
 
 
-exports.addToCart = async (user, body) => {
+exports.addToCart = async (req) => {
   const client = await db.connect();
 
   try {
     await client.query('BEGIN');
 
-    const context = resolveContext(user, body);
+    const context = resolveContext(req);
     const cart = await getOrCreateCart(client, context);
 
     const { product_code, product_name, quantity, uom, price } = body;
@@ -167,13 +170,13 @@ exports.addToCart = async (user, body) => {
 };
 
 // 🔹 CHECKOUT
-exports.checkout = async (user, body) => {
+exports.checkout = async (req) => {
   const client = await db.connect();
 
   try {
     await client.query('BEGIN');
 
-    const ctx = resolveContext(user, body);
+    const ctx = resolveContext(req);
 
     const cart = await client.query(
       `SELECT * FROM cart WHERE actor_id=$1 AND party_id=$2 AND status='ACTIVE'`,
