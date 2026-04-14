@@ -31,18 +31,21 @@ function resolveContext(user, input) {
   throw new Error('Invalid role');
 }
 
-exports.clearCart = async (user) => {
+exports.clearCart = async (user, query) => {
+  const ctx = resolveContext(user, query);
+
   const cart = await db.query(
-    `SELECT id FROM cart WHERE actor_id=$1 AND status='ACTIVE'`,
-    [user.userId]
+    `SELECT id FROM cart WHERE actor_id=$1 AND party_id=$2 AND status='ACTIVE'`,
+    [ctx.actor_id, ctx.party_id]
   );
 
-  if (cart.rows.length === 0) return;
+  if (!cart.rows.length) return;
 
-  await db.query(
-    `DELETE FROM cart_items WHERE cart_id=$1`,
-    [cart.rows[0].id]
-  );
+  await db.query(`DELETE FROM cart_items WHERE cart_id=$1`, [
+    cart.rows[0].id
+  ]);
+
+  return { message: 'Cleared' };
 };
 
 exports.deleteItem = async (itemId) => {
@@ -146,6 +149,59 @@ exports.addToCart = async (user, body) => {
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
+  } finally {
+    client.release();
+  }
+};
+
+// 🔹 CHECKOUT
+exports.checkout = async (user, body) => {
+  const client = await db.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    const ctx = resolveContext(user, body);
+
+    const cart = await client.query(
+      `SELECT * FROM cart WHERE actor_id=$1 AND party_id=$2 AND status='ACTIVE'`,
+      [ctx.actor_id, ctx.party_id]
+    );
+
+    if (!cart.rows.length) throw new Error('Cart empty');
+
+    const items = await client.query(
+      `SELECT * FROM cart_items WHERE cart_id=$1`,
+      [cart.rows[0].id]
+    );
+
+    // 👉 insert into sales_request (mock)
+    const order = await client.query(
+      `INSERT INTO sales_request(party_id, created_by)
+       VALUES($1,$2) RETURNING id`,
+      [ctx.party_id, ctx.actor_id]
+    );
+
+    for (const item of items.rows) {
+      await client.query(
+        `INSERT INTO sales_request_items(order_id, product_code, quantity)
+         VALUES($1,$2,$3)`,
+        [order.rows[0].id, item.product_code, item.quantity]
+      );
+    }
+
+    await client.query(
+      `UPDATE cart SET status='CHECKED_OUT' WHERE id=$1`,
+      [cart.rows[0].id]
+    );
+
+    await client.query('COMMIT');
+
+    return { order_id: order.rows[0].id };
+
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
   } finally {
     client.release();
   }

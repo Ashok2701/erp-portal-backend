@@ -28,3 +28,7 @@ exports.clearCart = async (req, res) => {
   await cartService.clearCart(req.user);
   res.json({ success: true });
 };
+
+exports.checkout = async (req, res) => {
+  res.json(await service.checkout(req.user, req.body));
+};

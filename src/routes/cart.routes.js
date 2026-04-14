@@ -5,11 +5,11 @@ const auth = require("../middleware/auth.middleware");
 
 
 
-
-router.post("/items", auth, cartController.addToCart);
-router.get("/", auth, cartController.getCart);
-router.put("/items/:id", auth, cartController.updateItem);
-router.delete("/items/:id", auth, cartController.deleteItem);
-router.delete("/", auth, cartController.clearCart);
+router.post('/add', controller.addToCart);
+router.get('/', controller.getCart);
+router.put('/item/:id', controller.updateItem);
+router.delete('/item/:id', controller.deleteItem);
+router.delete('/clear', controller.clearCart);
+router.post('/checkout', controller.checkout);
 
 module.exports = router;
