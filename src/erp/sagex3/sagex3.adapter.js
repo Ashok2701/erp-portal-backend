@@ -341,7 +341,7 @@ async getQuoteDetail(id, user) {
 }
 
 
-async getAllOrders(user) {
+async getAllOrders(req) {
 
   const sql = require("mssql");
 
@@ -357,30 +357,36 @@ async getAllOrders(user) {
   },
    };
 
+ const customerCode = await resolveCustomerCode(req);
 
   const pool = await sql.connect(config);
 
-    const { tenant_id } = user;
+  //  const { tenant_id } = user;
    
        // check duplicate
-  const getuserinfo = await UserModel.getUserById(user.user_id);
 
-    console.log("User details", user)
-     console.log("User details", getuserinfo)
-     console.log("User details", getuserinfo[0].erp_entity_code)
-  const result = await pool.request()
-    .input("x3user", sql.NVarChar, getuserinfo[0].erp_entity_code)
-    .query(`
-      SELECT A.SALFCY_0, A.ORDINVATI_0, A.CUR_0,
-             A.CUSORDREF_0, A.BPCORD_0, A.BPCNAM_0,
-             A.SOHNUM_0, A.SOHTYP_0, A.ORDDAT_0,
-             A.SHIDAT_0, A.ALLSTA_0, A.INVSTA_0,
-             C.BPTNAM_0
-      FROM tbs.TMSNEW.SORDER A
-      LEFT JOIN tbs.TMSNEW.BPCARRIER C ON A.BPTNUM_0 = C.BPTNUM_0
-      WHERE  A.BPCORD_0=@x3user
-      ORDER BY A.ORDDAT_0 DESC
-    `);
+let query = `
+    SELECT A.SALFCY_0, A.ORDINVATI_0, A.CUR_0,
+           A.CUSORDREF_0, A.BPCORD_0, A.BPCNAM_0,
+           A.SOHNUM_0, A.SOHTYP_0, A.ORDDAT_0,
+           A.SHIDAT_0, A.ALLSTA_0, A.INVSTA_0,
+           C.BPTNAM_0
+    FROM tbs.TMSNEW.SORDER A
+    LEFT JOIN tbs.TMSNEW.BPCARRIER C ON A.BPTNUM_0 = C.BPTNUM_0
+    WHERE 1=1
+  `;
+
+  const request = pool.request();
+
+  if (customerCode) {
+    query += ` AND A.BPCORD_0 = @customerCode`;
+    request.input("customerCode", sql.NVarChar, customerCode);
+  }
+
+  query += ` ORDER BY A.ORDDAT_0 DESC`;
+
+  const result = await request.query(query);
+
 
   for (const row of result.recordset) {
 
