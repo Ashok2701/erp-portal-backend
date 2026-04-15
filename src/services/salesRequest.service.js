@@ -38,7 +38,7 @@ exports.create = async (user, body) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [
         dropRequestId,
-        user.userId,
+        user.user_id,
         body.site,
         body.customer_code,
         body.reference,
@@ -71,7 +71,7 @@ exports.create = async (user, body) => {
           item.quantity,
           item.price,
           lineAmount,
-          user.userId
+          user.user_id
         ]
       );
     }

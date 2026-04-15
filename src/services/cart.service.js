@@ -191,17 +191,20 @@ exports.checkout = async (req) => {
     );
 
     // 👉 insert into sales_request (mock)
+
+
     const order = await client.query(
-      `INSERT INTO sales_request(party_id, created_by)
-       VALUES($1,$2) RETURNING id`,
-      [ctx.party_id, ctx.actor_id]
+      `INSERT INTO sales_requests(user_id, tenant_id, customer_code, total_amount, total_qty, status, request_date, created_time)
+       VALUES($1, $2, $3, $4, $5, 'Request Created', NOW(), NOW()) RETURNING uuid, drop_request_id`,
+      [ctx.actor_id, ctx.tenant_id, ctx.party_id, totalAmount, totalQty]
     );
+
 
     for (const item of items.rows) {
       await client.query(
-        `INSERT INTO sales_request_items(order_id, product_code, quantity)
-         VALUES($1,$2,$3)`,
-        [order.rows[0].id, item.product_code, item.quantity]
+         `INSERT INTO sales_request_items(drop_request_id, line_no, product_code, prod_desc, quantity, price, line_amount, user_id)
+             VALUES($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [order.rows[0].drop_request_id, idx+1, item.product_code, item.product_name, item.quantity, item.price, item.quantity * item.price, ctx.actor_id]
       );
     }
 
