@@ -92,11 +92,14 @@ exports.create = async (user, body) => {
 };
 
 exports.getAll = async (user) => {
+  console.log("at service request - user details");
+  console.log(user);
+
   const result = await db.query(
     `SELECT * FROM sales_requests
      WHERE user_id=$1
      ORDER BY created_time DESC`,
-    [user.userId]
+    [user.user_id]
   );
 
   return result.rows;
