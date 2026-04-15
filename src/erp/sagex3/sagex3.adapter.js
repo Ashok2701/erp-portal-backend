@@ -240,7 +240,7 @@ async getSupplierAddressesFromDB(supplierCode) {
 
 
 // SALES QUOTE
-async getAllQuotes(user) {
+async getAllQuotes(req) {
 
   const sql = require("mssql");
 
@@ -256,28 +256,30 @@ async getAllQuotes(user) {
     },
      };
   const pool = await sql.connect(config);
-      const { tenant_id } = user;
+  const customerCode = await resolveCustomerCode(req);
 
-         // check duplicate
-    const getuserinfo = await UserModel.getUserById(user.user_id);
-
-      console.log("User details", user)
-       console.log("User details", getuserinfo)
-       console.log("User details", getuserinfo[0].erp_entity_code)
-    const result = await pool.request()
-      .input("x3user", sql.NVarChar, getuserinfo[0].erp_entity_code)
-    .query(`
+  let query = `
       SELECT A.SQHNUM_0, A.SQHTYP_0, A.QUOINVATI_0, D.TEXTE_0, A.QUODAT_0,
-             A.CUSQUOREF_0, A.QUOSTA_0, A.FFWNUM_0, B.BPTNAM_0,
-             A.VLYDAT_0, A.SOHNUM_0, A.ORDDAT_0, A.CUR_0
-      FROM tbs.TMSNEW.SQUOTE A
-      LEFT JOIN tbs.TMSNEW.BPCARRIER B ON A.FFWNUM_0 = B.BPTNUM_0
-      LEFT JOIN tbs.TMSNEW.ATEXTRA D
-        ON A.SQHTYP_0 = D.IDENT1_0
-       AND D.CODFIC_0 = 'TABSQHTYP'
-      WHERE  A.BPCORD_0=@x3user
-      ORDER BY A.QUODAT_0 DESC
-    `);
+                   A.CUSQUOREF_0, A.QUOSTA_0, A.FFWNUM_0, B.BPTNAM_0,
+                   A.VLYDAT_0, A.SOHNUM_0, A.ORDDAT_0, A.CUR_0
+            FROM tbs.TMSNEW.SQUOTE A
+            LEFT JOIN tbs.TMSNEW.BPCARRIER B ON A.FFWNUM_0 = B.BPTNUM_0
+            LEFT JOIN tbs.TMSNEW.ATEXTRA D
+              ON A.SQHTYP_0 = D.IDENT1_0
+             AND D.CODFIC_0 = 'TABSQHTYP'
+      WHERE 1=1
+    `;
+
+    const request = pool.request();
+
+    if (customerCode) {
+      query += ` AND A.BPCORD_0 = @customerCode`;
+      request.input("customerCode", sql.NVarChar, customerCode);
+    }
+
+    query += ` ORDER BY A.QUODAT_0 DESC`;
+
+    const result = await request.query(query);
 
   for (const row of result.recordset) {
     const items = await pool.request()
@@ -460,7 +462,7 @@ async getOrderDetail(id, user) {
   };
 }
 
-async getAllInvoices(user) {
+async getAllInvoices(req) {
 
   const sql = require("mssql");
 
@@ -478,27 +480,30 @@ async getAllInvoices(user) {
 
 
   const pool = await sql.connect(config);
-   const { tenant_id } = user;
-
-           // check duplicate
-      const getuserinfo = await UserModel.getUserById(user.user_id);
-
-        console.log("User details", user)
-         console.log("User details", getuserinfo)
-         console.log("User details", getuserinfo[0].erp_entity_code)
-      const result = await pool.request()
-        .input("x3user", sql.NVarChar, getuserinfo[0].erp_entity_code)
-    .query(`
+  const customerCode = await resolveCustomerCode(req);
+   let query = `
       SELECT A.NUM_0, A.SIVTYP_0, A.BPR_0,
              A.ACCDAT_0, A.CUR_0,
              A.AMTATI_0, A.AMTNOT_0,
              A.STA_0, A.FCY_0
       FROM tbs.TMSNEW.SINVOICE A
-      WHERE  A.BPR_0=@x3user
-      ORDER BY A.ACCDAT_0 DESC
-    `);
+      WHERE 1=1
+    `;
 
-  return result.recordset;
+    const request = pool.request();
+
+    if (customerCode) {
+      query += ` AND A.BPR_0 = @customerCode`;
+      request.input("customerCode", sql.NVarChar, customerCode);
+    }
+
+    query += ` ORDER BY A.ACCDAT_0 DESC`;
+
+    const result = await request.query(query);
+
+    return result.recordset;
+
+
 }
 
 
@@ -535,7 +540,7 @@ async getInvoiceDetail(id, user) {
   };
 }
 
-async getPendingInvoices(user) {
+async getPendingInvoices(req) {
 
   const sql = require("mssql");
 
@@ -551,33 +556,33 @@ async getPendingInvoices(user) {
   },
    };
 
-  const pool = await sql.connect(config);
-   const { tenant_id } = user;
+    const pool = await sql.connect(config);
+    const customerCode = await resolveCustomerCode(req);
+      let query = `
+         SELECT DISTINCT A.NUM_0, A.ACCDAT_0,
+                      A.AMTATI_0, A.CUR_0,
+                      A.STA_0, STRDUDDAT_0
+               FROM tbs.TMSNEW.SINVOICE A
+               LEFT JOIN tbs.TMSNEW.GACCDUDATE B ON A.NUM_0 = B.NUM_0
+               WHERE B.FLGCLE_0 = 1
+       `;
 
-             // check duplicate
-        const getuserinfo = await UserModel.getUserById(user.user_id);
+       const request = pool.request();
 
-          console.log("User details", user)
-           console.log("User details", getuserinfo)
-           console.log("User details", getuserinfo[0].erp_entity_code)
-        const result = await pool.request()
-          .input("x3user", sql.NVarChar, getuserinfo[0].erp_entity_code)
-    .query(`
-      SELECT DISTINCT A.NUM_0, A.ACCDAT_0,
-             A.AMTATI_0, A.CUR_0,
-             A.STA_0, STRDUDDAT_0
-      FROM tbs.TMSNEW.SINVOICE A
-      LEFT JOIN tbs.TMSNEW.GACCDUDATE B ON A.NUM_0 = B.NUM_0
-      WHERE  A.BPR_0=@x3user
-        AND B.FLGCLE_0 = 1
-      ORDER BY STRDUDDAT_0 DESC
-    `);
+       if (customerCode) {
+         query += ` AND A.BPR_0 = @customerCode`;
+         request.input("customerCode", sql.NVarChar, customerCode);
+       }
+
+       query += ` ORDER BY A.STRDUDDAT_0 DESC`;
+
+       const result = await request.query(query);
 
   return result.recordset;
 }
 
 
-async getAllPayments(user) {
+async getAllPayments(req) {
 
   const sql = require("mssql");
 
@@ -593,27 +598,32 @@ async getAllPayments(user) {
   },
    };
 
+
   const pool = await sql.connect(config);
-   const { tenant_id } = user;
+const customerCode = await resolveCustomerCode(req);
+    //  const { tenant_id } = user;
 
-             // check duplicate
-        const getuserinfo = await UserModel.getUserById(user.user_id);
+         // check duplicate
 
-          console.log("User details", user)
-           console.log("User details", getuserinfo)
-           console.log("User details", getuserinfo[0].erp_entity_code)
-        const result = await pool.request()
-          .input("x3user", sql.NVarChar, getuserinfo[0].erp_entity_code)
-
-    .query(`
+  let query = `
       SELECT A.NUM_0, A.STA_0, A.FCY_0,
-             A.BPR_0, A.ACCDAT_0,
-             A.CUR_0, A.AMTCUR_0,
-             A.DUDDAT_0
-      FROM tbs.TMSNEW.PAYMENTH A
-      WHERE  A.BPR_0=@x3user
-      ORDER BY A.ACCDAT_0 DESC
-    `);
+                   A.BPR_0, A.ACCDAT_0,
+                   A.CUR_0, A.AMTCUR_0,
+                   A.DUDDAT_0
+            FROM tbs.TMSNEW.PAYMENTH A
+      WHERE 1=1
+    `;
+
+    const request = pool.request();
+
+    if (customerCode) {
+      query += ` AND A.BPR_0 = @customerCode`;
+      request.input("customerCode", sql.NVarChar, customerCode);
+    }
+
+    query += ` ORDER BY A.ACCDAT_0 DESC`;
+
+    const result = await request.query(query);
 
   for (const row of result.recordset) {
 
@@ -680,7 +690,7 @@ async getPaymentDetail(id, user) {
 }
 
 
-async getPaymentPendingInvoices(user) {
+async getPaymentPendingInvoices(req) {
 
   const sql = require("mssql");
 
@@ -696,28 +706,30 @@ async getPaymentPendingInvoices(user) {
   },
    };
 
-  const pool = await sql.connect(config);
-const { tenant_id } = user;
+const pool = await sql.connect(config);
+const customerCode = await resolveCustomerCode(req);
+    //  const { tenant_id } = user;
 
-           // check duplicate
-      const getuserinfo = await UserModel.getUserById(user.user_id);
+         // check duplicate
 
-        console.log("User details", user)
-         console.log("User details", getuserinfo)
-         console.log("User details", getuserinfo[0].erp_entity_code)
-      const result = await pool.request()
-        .input("x3user", sql.NVarChar, getuserinfo[0].erp_entity_code)
-    .query(`
+  let query = `
       SELECT A.NUM_0, A.INVDAT_0,
-             A.AMTATI_0, A.CUR_0,
-             STRDUDDAT_0
-      FROM tbs.TMSNEW.SINVOICE A
-      LEFT JOIN tbs.TMSNEW.GACCDUDATE B
-        ON A.NUM_0 = B.NUM_0
-      WHERE A.BPR_0=@x3user
-        AND B.FLGCLE_0 = 1
-      ORDER BY STRDUDDAT_0 DESC
-    `);
+                   A.AMTATI_0, A.CUR_0,
+                   STRDUDDAT_0
+            FROM tbs.TMSNEW.SINVOICE A
+            LEFT JOIN tbs.TMSNEW.GACCDUDATE B
+              ON A.NUM_0 = B.NUM_0
+              WHERE B.FLGCLE_0 = 1
+
+    `;
+
+    const request = pool.request();
+    if (customerCode) {
+      query += ` AND A.BPR_0 = @customerCode`;
+      request.input("customerCode", sql.NVarChar, customerCode);
+    }
+    query += ` ORDER BY A.STRDUDDAT_0 DESC`;
+    const result = await request.query(query);
 
   return result.recordset;
 }
