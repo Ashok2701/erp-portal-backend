@@ -177,14 +177,16 @@ async getCustomerAddressesFromDB(customerCode) {
   const pool = await sql.connect(config);
 
   const query = `
-    SELECT
-      ADRNUM_0 AS address_code,
-      ADRNAM_0 AS address_name,
-      ADD1_0 AS address_line1,
-      CTY_0 AS city,
-      CRY_0 AS country
-    FROM TMSNEW.BPADDRESS
-    WHERE BPACOD_0 = @customerCode
+     SELECT
+          BPAADD_0 AS address_code,
+          BPADES_0 AS address_name,
+          BPAADDLIG_0 AS address_line1,
+    	   BPAADDLIG_1 AS address_line2,
+    	    BPAADDLIG_2 AS address_line3,
+          CTY_0 AS city,
+          CRYNAM_0 AS country
+        FROM TMSNEW.BPADDRESS
+        WHERE BPANUM_0 = @customerCode
   `;
 
   const request = pool.request();
@@ -215,14 +217,16 @@ async getSupplierAddressesFromDB(supplierCode) {
   const pool = await sql.connect(config);
 
   const query = `
-    SELECT 
-      ADRNUM_0 AS address_code,
-      ADRNAM_0 AS address_name,
-      ADD1_0 AS address_line1,
-      CTY_0 AS city,
-      CRY_0 AS country
-    FROM TMSNEW.BPADDRESS
-    WHERE BPSNUM_0 = @supplierCode
+    SELECT
+         BPAADD_0 AS address_code,
+         BPADES_0 AS address_name,
+         BPAADDLIG_0 AS address_line1,
+   	   BPAADDLIG_1 AS address_line2,
+   	    BPAADDLIG_2 AS address_line3,
+         CTY_0 AS city,
+         CRYNAM_0 AS country
+       FROM TMSNEW.BPADDRESS
+       WHERE BPANUM_0 = @supplierCode
   `;
 
   const request = pool.request();
