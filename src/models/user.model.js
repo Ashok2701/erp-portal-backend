@@ -5,7 +5,7 @@ exports.findByUsername  = async(username) => {
  
     const result  = await pool.query(
 
-        `SELECT user_id, tenant_id,username, password_hash, is_active
+        `SELECT user_id, tenant_id,username, password_hash, is_active,erp_entity_type , erp_entity_code
         FROM users
         WHERE username = $1
         `,

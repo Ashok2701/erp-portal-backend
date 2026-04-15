@@ -6,11 +6,31 @@ const RoleModel = require("../models/role.model");
 const ModuleModel = require("../models/module.model");
 
 
+function resolveErpContext(user) {
+  let erp_customer_code = null;
+  let erp_supplier_code = null;
+
+  if (user.erp_entity_type === 'customer') {
+    erp_customer_code = user.erp_entity_code;
+  }
+  else if (user.erp_entity_type === 'supplier') {
+    erp_supplier_code = user.erp_entity_code;
+  }
+
+  return {
+    erp_customer_code,
+    erp_supplier_code
+  };
+}
+
 exports.login = async (req, res) => {
+
+
 
  const {username, password} = req.body;
 
  const user = await UserModel.findByUsername(username)
+
 
 if(!user) {
     return res.status(401).json({message : "User doesn't exist"});
@@ -21,6 +41,7 @@ if(!user) {
     return res.status(401).json({message : "User is inactive"});
  }
 
+const erpContext = resolveErpContext(user);
  console.log("user is", username)
  console.log("passwrod from body", password);
   console.log("passwrod from body", user.password_hash);
@@ -54,6 +75,8 @@ res.json({token,  user: {
                      user_id: user.user_id,
                      tenant_id: user.tenant_id,
                      username: user.username,
+                     erp_customer_code: erpContext.erp_customer_code,
+                     erp_supplier_code: erpContext.erp_supplier_code,
                      roles
 
                    }
