@@ -1,4 +1,5 @@
 const db = require("../config/db");
+const emailService = require("./email.service");
 
 async function generateRequestNumber(client) {
   const seq = await client.query(
@@ -78,6 +79,33 @@ exports.create = async (user, body) => {
     }
 
     await client.query("COMMIT");
+
+ // EMAIL TRIGGER AFTER SALES REQUEST CREATION
+
+
+    // Inside create(), after COMMIT and before return:
+    // Fetch customer email
+    const customerResult = await db.query(
+      'SELECT email FROM users WHERE user_id = $1', [user.user_id]
+    );
+    const customerEmail = customerResult.rows[0]?.email;
+
+    // Send emails (async, don't await to avoid blocking)
+    emailService.sendSalesRequestConfirmation(customerEmail, {
+      drop_request_id: dropRequestId,
+      customer_code: body.customer_code,
+      items: body.items,
+      total_amount: totalAmount,
+    }).catch(() => {});
+
+    emailService.sendSalesRequestAdminAlert({
+      drop_request_id: dropRequestId,
+      customer_code: body.customer_code,
+      items: body.items,
+      total_amount: totalAmount,
+      address: body.address,
+    }).catch(() => {});
+// END OF EMAIL TRIGGER
 
     return {
       message: "Sales Request Created",

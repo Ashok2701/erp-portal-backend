@@ -1,4 +1,5 @@
 const db = require("../config/db");
+ const emailService = require("./email.service");
 
 exports.createContent = async (user, body) => {
   const client = await db.connect();
@@ -38,6 +39,39 @@ exports.createContent = async (user, body) => {
     }
 
     await client.query("COMMIT");
+
+
+  // 3. Send email notification
+
+
+    // Inside createContent(), after COMMIT:
+    // Get target user emails for notification
+    const targetEmails = [];
+    for (const t of body.targets) {
+      if (t.target_type === 'ALL') {
+        const allUsers = await db.query('SELECT email FROM users WHERE email IS NOT NULL');
+        targetEmails.push(...allUsers.rows.map(u => u.email).filter(Boolean));
+      } else if (t.target_type === 'ROLE') {
+        const roleUsers = await db.query(
+          `SELECT u.email FROM users u
+           JOIN user_roles ur ON u.user_id = ur.user_id
+           JOIN roles r ON ur.role_id = r.role_id
+           WHERE LOWER(r.role_name) = LOWER($1) AND u.email IS NOT NULL`,
+          [t.target_value]
+        );
+        targetEmails.push(...roleUsers.rows.map(u => u.email).filter(Boolean));
+      } else if (t.target_type === 'USER') {
+        const userResult = await db.query('SELECT email FROM users WHERE user_id = $1', [t.target_value]);
+        if (userResult.rows[0]?.email) targetEmails.push(userResult.rows[0].email);
+      }
+    }
+    emailService.sendContentNotification([...new Set(targetEmails)], {
+      type: body.type,
+      title: body.title,
+      message: body.message,
+      expiry_date: body.expiry_date,
+    }).catch(() => {});
+   // END OF EMAIL NOTIFICATION
 
     return { id: contentId };
 
@@ -144,6 +178,14 @@ exports.sendMessage = async (user, body) => {
     );
 
     await client.query("COMMIT");
+
+
+    // EMAIL NOTIFICATION
+    const senderResult = await db.query('SELECT username FROM users WHERE user_id = $1', [user.user_id]);
+    emailService.sendMessageToAdminEmail(
+      senderResult.rows[0]?.username || 'User',
+      body
+    ).catch(() => {});
 
     return { id: contentId };
 
