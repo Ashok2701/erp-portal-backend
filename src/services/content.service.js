@@ -242,7 +242,7 @@ exports.getAcknowledgements = async (contentId) => {
        uc.viewed_at,
        uc.signed_at
      FROM user_content uc
-     JOIN users u ON u.user_id = uc.user_id
+     JOIN users u ON u.user_id = uc.user_id::uuid
      WHERE uc.content_id = $1
      ORDER BY uc.viewed_at DESC`,
     [contentId]
