@@ -139,7 +139,7 @@ exports.sendMessage = async (user, body) => {
     await client.query(
       `INSERT INTO content_targets
        (content_id, target_type, target_value)
-       VALUES ($1,'ROLE','ADMIN')`,
+       VALUES ($1,'ROLE','Administrator')`,
       [contentId]
     );
 
