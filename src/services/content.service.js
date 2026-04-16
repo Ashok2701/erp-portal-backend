@@ -231,3 +231,31 @@ exports.updateContent = async (user, contentId, body) => {
 
   return result.rows[0];
 };
+
+
+exports.getAcknowledgements = async (contentId) => {
+  const result = await db.query(
+    `SELECT
+       uc.user_id,
+       u.username,
+       uc.status,
+       uc.viewed_at,
+       uc.signed_at
+     FROM user_content uc
+     JOIN users u ON u.user_id = uc.user_id
+     WHERE uc.content_id = $1
+     ORDER BY uc.viewed_at DESC`,
+    [contentId]
+  );
+  return result.rows;
+};
+
+exports.getSentContent = async (user) => {
+  const result = await db.query(
+    `SELECT * FROM content
+     WHERE created_by = $1
+     ORDER BY created_at DESC`,
+    [user.user_id]
+  );
+  return result.rows;
+};

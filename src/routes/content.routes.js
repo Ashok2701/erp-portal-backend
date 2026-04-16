@@ -12,7 +12,10 @@ router.post("/:id/view", auth, ctrl.markViewed);
 router.post("/:id/sign", auth, ctrl.markSigned);
 router.post("/message", auth, ctrl.sendMessage);
 router.get("/", auth, ctrl.getAllContent);
+router.get("/:id/acknowledgements", auth, ctrl.getAcknowledgements);
+router.get("/sent/list", auth, ctrl.getSentContent);
 router.get("/:id", auth, ctrl.getContentById);
 router.put("/:id", auth, ctrl.updateContent);
+
 
 module.exports = router;
