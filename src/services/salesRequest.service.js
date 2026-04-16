@@ -36,7 +36,7 @@ exports.create = async (user, body) => {
       `INSERT INTO sales_requests
        (drop_request_id, user_id, site, customer_code, reference, currency,
         total_amount, total_qty, comment, address, carrier, mode, request_date)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, $13)`,
       [
         dropRequestId,
         user.user_id,
