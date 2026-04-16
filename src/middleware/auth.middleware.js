@@ -1,6 +1,7 @@
 const jwt = require("jsonwebtoken");
+const db = require("../config/db");
 
-module.exports = (req, res, next) => {
+module.exports = async  (req, res, next) => {
 
   const authHeader = req.headers.authorization;
 
