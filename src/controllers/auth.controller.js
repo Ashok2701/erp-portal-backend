@@ -75,6 +75,7 @@ res.json({token,  user: {
                      user_id: user.user_id,
                      tenant_id: user.tenant_id,
                      username: user.username,
+                     role: roles[0]?.role_name || "CUSTOMER",
                      erp_customer_code: erpContext.erp_customer_code,
                      erp_supplier_code: erpContext.erp_supplier_code,
                      roles

@@ -34,7 +34,7 @@ exports.create = async (user, body) => {
     await client.query(
       `INSERT INTO sales_requests
        (drop_request_id, user_id, site, customer_code, reference, currency,
-        total_amount, total_qty, comment, address, carrier, mode)
+        total_amount, total_qty, comment, address, carrier, mode, request_date)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
       [
         dropRequestId,
@@ -48,7 +48,8 @@ exports.create = async (user, body) => {
         body.comment,
         body.address,
         body.carrier,
-        body.mode
+        body.mode,
+        body.request_date
       ]
     );
 
@@ -135,13 +136,15 @@ exports.update = async (dropRequestId, body) => {
      SET comment=$1,
          address=$2,
          reference=$3,
-         currency=$4
+         currency=$4,
+         request_date=$5
      WHERE drop_request_id=$5`,
     [
       body.comment,
       body.address,
       body.reference,
       body.currency,
+      body.request_date,
       dropRequestId
     ]
   );
