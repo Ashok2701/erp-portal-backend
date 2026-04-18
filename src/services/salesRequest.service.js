@@ -124,6 +124,10 @@ exports.getAll = async (user) => {
   console.log("at service request - user details");
   console.log(user);
 
+
+  let query;
+  let params = [];
+
 if (user.role === "Administrator") {
     // Admin gets all records
     query = `
@@ -139,6 +143,14 @@ if (user.role === "Administrator") {
     `;
     params = [user.user_id];
   }
+
+
+  const result = await db.query(
+    `SELECT * FROM sales_requests
+     WHERE user_id=$1
+     ORDER BY created_time DESC`,
+    [user.user_id]
+  );
 
    const result = await db.query(query, params);
     return result.rows;
