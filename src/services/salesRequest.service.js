@@ -140,14 +140,6 @@ if (user.role === "Administrator") {
     params = [user.user_id];
   }
 
-
-  const result = await db.query(
-    `SELECT * FROM sales_requests
-     WHERE user_id=$1
-     ORDER BY created_time DESC`,
-    [user.user_id]
-  );
-
    const result = await db.query(query, params);
     return result.rows;
 };
