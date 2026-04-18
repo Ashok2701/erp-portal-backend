@@ -361,10 +361,18 @@ exports.generateOrder = async (user, requestIds) => {
             } catch {}
           } else {
             console.error(`❌ X3 error for ${dropRequestId}:`, errorMsg || 'Unknown error');
+             await db.query(
+                          "UPDATE sales_requests SET status = 'DRAFT' WHERE drop_request_id = $1",
+                          [dropRequestId]
+                        );
             results.push({ drop_request_id: dropRequestId, success: false, error: errorMsg || "X3 processing error", status: "PROCESSING" });
           }
         } catch (x3Err) {
           console.error(`❌ X3 connection error for ${dropRequestId}:`, x3Err.message);
+          await db.query(
+            "UPDATE sales_requests SET status = 'DRAFT' WHERE drop_request_id = $1",
+            [dropRequestId]
+          );
           results.push({ drop_request_id: dropRequestId, success: false, error: "X3 connection failed: " + x3Err.message });
         }
       } else {
