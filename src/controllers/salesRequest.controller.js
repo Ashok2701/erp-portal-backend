@@ -29,3 +29,13 @@ exports.removeSalesRequest = async (req, res) => {
   await service.remove(req.params.id);
   res.json({ success: true });
 };
+
+exports.generateOrder = async (req, res) => {
+  try {
+    const data = await service.generateOrder(req.user, req.body.request_ids);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("GENERATE ORDER ERROR:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
