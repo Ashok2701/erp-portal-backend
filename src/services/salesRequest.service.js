@@ -215,7 +215,7 @@ exports.generateOrder = async (user, requestIds) => {
 
   console.log("requestIds", requestIds);
   console.log("user", user);
-
+  console.log("X3 details", process.env.X3_SOAP_URL);
   const results = [];
 
   for (const dropRequestId of requestIds) {
