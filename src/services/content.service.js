@@ -108,8 +108,24 @@ exports.getAllContent = async (user) => {
 
 exports.getFeed = async (user) => {
 
-  const result = await db.query(
+
     `
+     // For verification users, only show content targeted at them specifically
+      if (user.status === 'IN_VERIFICATION' || user.status === 'PENDING_APPROVAL') {
+        const result = await db.query(
+          `SELECT c.*, uc.status, uc.viewed_at, uc.signed_at
+           FROM content c
+           JOIN content_targets ct ON c.id = ct.content_id
+           LEFT JOIN user_content uc ON uc.content_id = c.id AND uc.user_id = $1
+           WHERE ct.target_type = 'USER' AND ct.target_value = $1::text
+           ORDER BY c.created_at DESC`,
+          [user.id]
+        );
+        return result.rows;
+      }
+
+
+const result = await db.query(
     SELECT c.*, uc.status, uc.viewed_at, uc.signed_at
     FROM content c
     LEFT JOIN content_targets ct ON c.id = ct.content_id
