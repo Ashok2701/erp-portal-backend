@@ -108,8 +108,6 @@ exports.getAllContent = async (user) => {
 
 exports.getFeed = async (user) => {
 
-
-    `
      // For verification users, only show content targeted at them specifically
       if (user.status === 'IN_VERIFICATION' || user.status === 'PENDING_APPROVAL') {
         const result = await db.query(
@@ -124,9 +122,8 @@ exports.getFeed = async (user) => {
         return result.rows;
       }
 
-
 const result = await db.query(
-    SELECT c.*, uc.status, uc.viewed_at, uc.signed_at
+    `SELECT c.*, uc.status, uc.viewed_at, uc.signed_at
     FROM content c
     LEFT JOIN content_targets ct ON c.id = ct.content_id
     LEFT JOIN user_content uc 
@@ -135,11 +132,9 @@ const result = await db.query(
       ct.target_type = 'ALL'
       OR (ct.target_type = 'USER' AND ct.target_value = $1::text)
       OR (ct.target_type = 'ROLE' AND ct.target_value = $2)
-    ORDER BY c.created_at DESC
-    `,
+    ORDER BY c.created_at DESC`,
     [user.id, user.role]
   );
-
   return result.rows;
 };
 
