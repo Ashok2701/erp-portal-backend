@@ -24,7 +24,7 @@ module.exports = async  (req, res, next) => {
 //       );
 
 const userResult = await db.query(
-  `SELECT u.id, u.status, r.role_name
+  `SELECT u.user_id, u.status, r.role_name
    FROM users u
    LEFT JOIN user_roles ur ON u.user_id = ur.user_id
    LEFT JOIN roles r ON ur.role_id = r.role_id
@@ -35,15 +35,15 @@ const userResult = await db.query(
 
        req.user = {
          id: decoded.user_id,
-
          user_id: decoded.user_id,
          tenant_id: decoded.tenant_id,
-         role: userResult.rows[0]?.role_name || 'Customer',
+         role: userResult.rows[0]?.role_name || decoded.role || 'Customer',
          status: userResult.rows[0]?.status || 'ACTIVE'
        };
     next();
   }
   catch (err) {
+    console.error("AUTH MIDDLEWARE ERROR:", err.message);
     return res.status(403).json({message : "Invalid or expired token"});
   }
 
