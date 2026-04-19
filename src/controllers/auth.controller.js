@@ -78,7 +78,7 @@ const roles = await RoleModel.getRolesByUserId(user.user_id);
  const token = jwt.sign({
     user_id : user.user_id,
     tenant_id : user.tenant_id,
-    role : roles[0].role_name
+    role : roles[0].role_name || "CUSTOMER",
  },
 
    process.env.JWT_SECRET,
