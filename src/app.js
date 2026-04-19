@@ -12,6 +12,7 @@ const salesInvoiceRoutes = require("./routes/salesInvoice.routes");
 const PaymentRoutes = require("./routes/payment.routes");
 const dashboardRoutes = require("./routes/dashboard.routes");
 const contentRoutes = require("./routes/content.routes");
+const signupRoutes = require("./routes/signup.routes");
 const app = express();
 
 app.use(cors());
@@ -26,12 +27,11 @@ app.use("/role-modules", roleModuleRoutes);
 app.use("/erp", require("./routes/erp.routes"));
 app.use("/api/chat", chatRoutes);
 app.use("/cart", cartRoutes);
-
+app.use("/", signupRoutes);
 app.use("/orders", salesOrderRoutes);
 app.use("/sinvoice", salesInvoiceRoutes);
 app.use("/squote", salesQuoteRoutes);
 app.use("/payment", PaymentRoutes);
-
 
 app.use("/content", contentRoutes);
 

@@ -41,6 +41,17 @@ if(!user) {
     return res.status(401).json({message : "User is inactive"});
  }
 
+
+ if (user.status === 'PENDING_REVIEW') {
+   // throw new Error("Your account is pending review. Please wait for admin approval.");
+    return res.status(401).json({message : "Your account is pending review. Please wait for admin approval."});
+ }
+ if (user.status === 'REJECTED') {
+  // throw new Error("Your account has been rejected. Please contact support.");
+   return res.status(401).json({message : "Your account has been rejected. Please contact support."});
+ }
+
+
 const erpContext = resolveErpContext(user);
  console.log("user is", username)
  console.log("passwrod from body", password);
@@ -78,6 +89,7 @@ res.json({token,  user: {
                      role: roles[0]?.role_name || "CUSTOMER",
                      erp_customer_code: erpContext.erp_customer_code,
                      erp_supplier_code: erpContext.erp_supplier_code,
+                     status: user.status || "ACTIVE",
                      roles
 
                    }
