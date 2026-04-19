@@ -1,6 +1,7 @@
 const db = require("../config/db");
 const emailService = require("./email.service");
 const axios = require("axios");
+const { getSoapClient } = require("../utils/soapClient");
 
 async function generateRequestNumber(client) {
   const seq = await client.query(
@@ -210,7 +211,7 @@ exports.remove = async (dropRequestId) => {
 
 
 // generate Order from Request
-exports.generateOrder = async (user, requestIds) => {
+exports.generateOrder_oldone = async (user, requestIds) => {
   if (!requestIds || requestIds.length === 0) throw new Error("No request IDs provided");
 
   console.log("requestIds", requestIds);
@@ -384,6 +385,179 @@ exports.generateOrder = async (user, requestIds) => {
       results.push({ drop_request_id: dropRequestId, success: false, error: err.message });
     } finally {
       client.release();
+    }
+  }
+
+  return { processed: results.length, results };
+};
+
+
+
+
+const { getSoapClient } = require("../utils/soapClient");
+
+exports.generateOrder = async (user, requestIds) => {
+  if (!requestIds || requestIds.length === 0) {
+    throw new Error("No request IDs provided");
+  }
+
+  const results = [];
+
+  for (const dropRequestId of requestIds) {
+    const clientDb = await db.connect();
+
+    try {
+      await clientDb.query("BEGIN");
+
+      const header = await clientDb.query(
+        "SELECT * FROM sales_requests WHERE drop_request_id = $1",
+        [dropRequestId]
+      );
+
+      if (header.rows.length === 0) {
+        results.push({ drop_request_id: dropRequestId, success: false, error: "Not found" });
+        await clientDb.query("ROLLBACK");
+        continue;
+      }
+
+      const sr = header.rows[0];
+
+      const items = await clientDb.query(
+        "SELECT * FROM sales_request_items WHERE drop_request_id = $1 ORDER BY line_no",
+        [dropRequestId]
+      );
+
+      const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+      const dlvDate = sr.request_date
+        ? new Date(sr.request_date).toISOString().slice(0, 10).replace(/-/g, "")
+        : today;
+
+      // Build LINE XML (same as before)
+      const lineItems = items.rows.map((item, idx) => `
+<LIN NUM="${idx + 1}">
+  <FLD NAME="ITMREF">${item.product_code}</FLD>
+  <FLD NAME="QTY">${parseFloat(item.quantity) || 1}</FLD>
+  <FLD NAME="GROPRI">${parseFloat(item.price) || 0}</FLD>
+  <FLD NAME="SAU">${item.uom || "EA"}</FLD>
+</LIN>
+`).join("");
+
+      // Build PARAM XML (IMPORTANT - no SOAP envelope here)
+      const inputXml = `
+<![CDATA[
+<PARAM>
+  <GRP ID="SOH0_1">
+    <FLD NAME="SAESSION">${sr.site || process.env.X3_SALES_SITE || "1100"}</FLD>
+    <FLD NAME="SOHTYP">${process.env.X3_ORDER_TYPE || "SOI"}</FLD>
+  </GRP>
+  <GRP ID="SOH0_2">
+    <FLD NAME="BPCORD">${sr.customer_code}</FLD>
+    <FLD NAME="ORDDAT">${today}</FLD>
+    <FLD NAME="DEESSION">${dlvDate}</FLD>
+    <FLD NAME="CUR">${sr.currency || "USD"}</FLD>
+    <FLD NAME="BPAADD">${sr.address || ""}</FLD>
+    <FLD NAME="PJTH">${sr.reference || ""}</FLD>
+  </GRP>
+  <TAB ID="SOH1_1" SIZE="${items.rows.length}">
+    ${lineItems}
+  </TAB>
+</PARAM>
+]]>
+`;
+
+      await clientDb.query(
+        "UPDATE sales_requests SET status = 'PROCESSING' WHERE drop_request_id = $1",
+        [dropRequestId]
+      );
+
+      await clientDb.query("COMMIT");
+
+      // 🔥 SOAP CLIENT CALL (LIKE WORKING PROJECT)
+      try {
+        const soapClient = await getSoapClient();
+
+        const response = await new Promise((resolve, reject) => {
+          soapClient.run(
+            {
+              callContext: {
+                $xml: `
+                  <codeLang xsi:type="xsd:string">ENG</codeLang>
+                  <poolAlias xsi:type="xsd:string">${process.env.X3_POOL_ALIAS || "TMSNEW"}</poolAlias>
+                  <requestConfig xsi:type="xsd:string">adxwss.optreturn=XML</requestConfig>
+                `,
+                attributes: { "xsi:type": "wss:CAdxCallContext" },
+              },
+              publicName: {
+                attributes: { "xsi:type": "xsd:string" },
+                $value: "SOH",
+              },
+              inputXml: {
+                attributes: { "xsi:type": "xsd:string" },
+                $xml: inputXml,
+              },
+            },
+            (err, result) => {
+              if (err) return reject(err);
+              resolve(result);
+            }
+          );
+        });
+
+        const respXml = response?.runReturn?.resultXml?.$value;
+
+        // Extract SOHNUM
+        const match = respXml?.match(/SOHNUM[^>]*>([^<]+)</);
+        const erpOrderNo = match?.[1]?.trim();
+
+        if (erpOrderNo) {
+          await db.query(
+            "UPDATE sales_requests SET status = 'ORDER GENERATED', erp_order_no = $1 WHERE drop_request_id = $2",
+            [erpOrderNo, dropRequestId]
+          );
+
+          results.push({
+            drop_request_id: dropRequestId,
+            success: true,
+            erp_order_no: erpOrderNo,
+          });
+        } else {
+          await db.query(
+            "UPDATE sales_requests SET status = 'DRAFT' WHERE drop_request_id = $1",
+            [dropRequestId]
+          );
+
+          results.push({
+            drop_request_id: dropRequestId,
+            success: false,
+            error: "No SOHNUM returned",
+          });
+        }
+
+      } catch (soapErr) {
+        console.error("SOAP Error:", soapErr.message);
+
+        await db.query(
+          "UPDATE sales_requests SET status = 'DRAFT' WHERE drop_request_id = $1",
+          [dropRequestId]
+        );
+
+        results.push({
+          drop_request_id: dropRequestId,
+          success: false,
+          error: soapErr.message,
+        });
+      }
+
+    } catch (err) {
+      await clientDb.query("ROLLBACK");
+
+      results.push({
+        drop_request_id: dropRequestId,
+        success: false,
+        error: err.message,
+      });
+    } finally {
+      clientDb.release();
     }
   }
 
