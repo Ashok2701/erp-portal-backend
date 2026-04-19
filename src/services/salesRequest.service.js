@@ -392,10 +392,6 @@ exports.generateOrder_oldone = async (user, requestIds) => {
 };
 
 
-
-
-const { getSoapClient } = require("../utils/soapClient");
-
 exports.generateOrder = async (user, requestIds) => {
   if (!requestIds || requestIds.length === 0) {
     throw new Error("No request IDs provided");
