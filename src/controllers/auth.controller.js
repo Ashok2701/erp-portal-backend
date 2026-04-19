@@ -36,10 +36,14 @@ if(!user) {
     return res.status(401).json({message : "User doesn't exist"});
  }
 
-
- if(!user.is_active) {
+ if(!user.is_active && user.status !== 'IN_VERIFICATION' && user.status !== 'PENDING_APPROVAL') {
     return res.status(401).json({message : "User is inactive"});
  }
+
+
+// if(!user.is_active) {
+//    return res.status(401).json({message : "User is inactive"});
+// }
 
 
  if (user.status === 'PENDING_REVIEW') {
