@@ -37,7 +37,7 @@ const userResult = await db.query(
          id: decoded.user_id,
          user_id: decoded.user_id,
          tenant_id: decoded.tenant_id,
-         role: userResult.rows[0]?.role_name || 'Customer'
+         role: userResult.rows[0]?.role_name || 'Customer',
          status: userResult.rows[0]?.status || 'ACTIVE'
        };
     next();
