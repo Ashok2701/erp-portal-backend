@@ -1,5 +1,5 @@
 const db = require("../config/db");
-const bcrypt = require("bcryptjs");
+const bcrypt = require("bcrypt");
 const { v4: uuidv4 } = require("uuid");
 
 const DEFAULT_TENANT_ID = "7d9e33cc-6a5f-4bd4-a76c-bdcb60b03d58";
