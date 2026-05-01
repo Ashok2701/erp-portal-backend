@@ -48,8 +48,8 @@ class SageX3Adapter extends BaseERPAdapter {
   let query = `
     SELECT I.ITMREF_0 AS PROD_CODE,I.TCLCOD_0 AS CATEGORY, I.ITMDES1_0 AS PROD_DESC, C.BLOB_0 AS PROD_IMG, I.STU_0 AS UOM
 FROM 
-TMSNEW.ITMMASTER I
-LEFT JOIN TMSNEW.CBLOB C ON I.ITMREF_0 = C.IDENT1_0 AND C.CODBLB_0 = 'ITM'
+LEWISB.ITMMASTER I
+LEFT JOIN LEWISB.CBLOB C ON I.ITMREF_0 = C.IDENT1_0 AND C.CODBLB_0 = 'ITM'
     `;
 
    
@@ -89,7 +89,7 @@ LEFT JOIN TMSNEW.CBLOB C ON I.ITMREF_0 = C.IDENT1_0 AND C.CODBLB_0 = 'ITM'
     
   
    const result = await pool.request().query(`
-      SELECT TCLCOD_0 AS Category_Code, TCLDES_0 AS Category_Desc FROM TMSNEW.ITMCATEG
+      SELECT TCLCOD_0 AS Category_Code, TCLDES_0 AS Category_Desc FROM LEWISB.ITMCATEG
    `);
 
    return result.recordset;
@@ -118,7 +118,7 @@ LEFT JOIN TMSNEW.CBLOB C ON I.ITMREF_0 = C.IDENT1_0 AND C.CODBLB_0 = 'ITM'
       SELECT
       BPSNAM_0 AS supplierCode,
 	  BPSNAM_0 as supplierName
-     FROM TMSNEW.BPSUPPLIER
+     FROM LEWISB.BPSUPPLIER
    `);
 
    return result.recordset;
@@ -149,7 +149,7 @@ LEFT JOIN TMSNEW.CBLOB C ON I.ITMREF_0 = C.IDENT1_0 AND C.CODBLB_0 = 'ITM'
      SELECT
        BPCNUM_0 AS customer_code,
        BPCNAM_0 AS customer_name
-     FROM TMSNEW.BPCUSTOMER
+     FROM LEWISB.BPCUSTOMER
    `);
 
    return result.recordset;
@@ -185,7 +185,7 @@ async getCustomerAddressesFromDB(customerCode) {
     	    BPAADDLIG_2 AS address_line3,
           CTY_0 AS city,
           CRYNAM_0 AS country
-        FROM TMSNEW.BPADDRESS
+        FROM LEWISB.BPADDRESS
         WHERE BPANUM_0 = @customerCode
   `;
 
@@ -225,7 +225,7 @@ async getSupplierAddressesFromDB(supplierCode) {
    	    BPAADDLIG_2 AS address_line3,
          CTY_0 AS city,
          CRYNAM_0 AS country
-       FROM TMSNEW.BPADDRESS
+       FROM LEWISB.BPADDRESS
        WHERE BPANUM_0 = @supplierCode
   `;
 
@@ -262,9 +262,9 @@ async getAllQuotes(req) {
       SELECT A.SQHNUM_0, A.SQHTYP_0, A.QUOINVATI_0, D.TEXTE_0, A.QUODAT_0,
                    A.CUSQUOREF_0, A.QUOSTA_0, A.FFWNUM_0, B.BPTNAM_0,
                    A.VLYDAT_0, A.SOHNUM_0, A.ORDDAT_0, A.CUR_0
-            FROM tbs.TMSNEW.SQUOTE A
-            LEFT JOIN tbs.TMSNEW.BPCARRIER B ON A.FFWNUM_0 = B.BPTNUM_0
-            LEFT JOIN tbs.TMSNEW.ATEXTRA D
+            FROM tbs.LEWISB.SQUOTE A
+            LEFT JOIN tbs.LEWISB.BPCARRIER B ON A.FFWNUM_0 = B.BPTNUM_0
+            LEFT JOIN tbs.LEWISB.ATEXTRA D
               ON A.SQHTYP_0 = D.IDENT1_0
              AND D.CODFIC_0 = 'TABSQHTYP'
       WHERE 1=1
@@ -287,7 +287,7 @@ async getAllQuotes(req) {
       .input("quoteNo", sql.NVarChar, row.SQHNUM_0)
       .query(`
         SELECT ITMREF_0, ITMDES1_0, QTY_0, SAU_0, NETPRIATI_0
-        FROM tbs.TMSNEW.SQUOTED
+        FROM tbs.LEWISB.SQUOTED
         WHERE  SQHNUM_0=@quoteNo
       `);
 
@@ -320,7 +320,7 @@ async getQuoteDetail(id, user) {
     .input("orderNo", sql.NVarChar, id)
     .query(`
       SELECT *
-      FROM tbs.TMSNEW.SQUOTE
+      FROM tbs.LEWISB.SQUOTE
       WHERE SQHNUM_0=@orderNo
     `);
 
@@ -332,7 +332,7 @@ async getQuoteDetail(id, user) {
     .input("quoteNo", sql.NVarChar, id)
     .query(`
       SELECT ITMREF_0, ITMDES1_0, QTY_0, NETPRIATI_0
-      FROM tbs.TMSNEW.SQUOTED
+      FROM tbs.LEWISB.SQUOTED
       WHERE SQHNUM_0=@quoteNo
     `);
 
@@ -373,8 +373,8 @@ let query = `
            A.SOHNUM_0, A.SOHTYP_0, A.ORDDAT_0,
            A.SHIDAT_0, A.ALLSTA_0, A.INVSTA_0,
            C.BPTNAM_0
-    FROM tbs.TMSNEW.SORDER A
-    LEFT JOIN tbs.TMSNEW.BPCARRIER C ON A.BPTNUM_0 = C.BPTNUM_0
+    FROM tbs.LEWISB.SORDER A
+    LEFT JOIN tbs.LEWISB.BPCARRIER C ON A.BPTNUM_0 = C.BPTNUM_0
     WHERE 1=1
   `;
 
@@ -399,8 +399,8 @@ let query = `
         SELECT A.ITMREF_0, C.ITMDES_0,
                A.QTY_0, C.NETPRIATI_0,
                (A.QTY_0 * C.GROPRI_0) AS total_amount
-        FROM tbs.TMSNEW.SORDERQ A
-        LEFT JOIN tbs.TMSNEW.SORDERP C
+        FROM tbs.LEWISB.SORDERQ A
+        LEFT JOIN tbs.LEWISB.SORDERP C
           ON A.SOHNUM_0 = C.SOHNUM_0
         WHERE  A.SOHNUM_0=@orderNo
       `);
@@ -435,7 +435,7 @@ async getOrderDetail(id, user) {
     .input("orderNo", sql.NVarChar, id)
     .query(`
       SELECT *
-      FROM tbs.TMSNEW.SORDER
+      FROM tbs.LEWISB.SORDER
       WHERE SOHNUM_0=@orderNo
     `);
 
@@ -450,8 +450,8 @@ async getOrderDetail(id, user) {
       SELECT A.ITMREF_0, C.ITMDES_0,
              A.QTY_0, A.DLVQTY_0,
              C.NETPRIATI_0
-      FROM tbs.TMSNEW.SORDERQ A
-      LEFT JOIN tbs.TMSNEW.SORDERP C
+      FROM tbs.LEWISB.SORDERQ A
+      LEFT JOIN tbs.LEWISB.SORDERP C
         ON A.SOHNUM_0 = C.SOHNUM_0
       WHERE  A.SOHNUM_0=@orderNo
     `);
@@ -486,7 +486,7 @@ async getAllInvoices(req) {
              A.ACCDAT_0, A.CUR_0,
              A.AMTATI_0, A.AMTNOT_0,
              A.STA_0, A.FCY_0
-      FROM tbs.TMSNEW.SINVOICE A
+      FROM tbs.LEWISB.SINVOICE A
       WHERE 1=1
     `;
 
@@ -517,7 +517,7 @@ async getInvoiceDetail(id, user) {
     .input("invoiceNo", sql.NVarChar, id)
     .query(`
       SELECT *
-      FROM tbs.TMSNEW.SINVOICE
+      FROM tbs.LEWISB.SINVOICE
       WHERE NUM_0=@invoiceNo
     `);
 
@@ -530,7 +530,7 @@ async getInvoiceDetail(id, user) {
     .query(`
       SELECT ITMREF_0, ITMDES1_0,
              QTY_0, NETPRIATI_0
-      FROM tbs.TMSNEW.SINVOICED
+      FROM tbs.LEWISB.SINVOICED
       WHERE NUM_0=@invoiceNo
     `);
 
@@ -562,8 +562,8 @@ async getPendingInvoices(req) {
          SELECT DISTINCT A.NUM_0, A.ACCDAT_0,
                       A.AMTATI_0, A.CUR_0,
                       A.STA_0, STRDUDDAT_0
-               FROM tbs.TMSNEW.SINVOICE A
-               LEFT JOIN tbs.TMSNEW.GACCDUDATE B ON A.NUM_0 = B.NUM_0
+               FROM tbs.LEWISB.SINVOICE A
+               LEFT JOIN tbs.LEWISB.GACCDUDATE B ON A.NUM_0 = B.NUM_0
                WHERE B.FLGCLE_0 = 1
        `;
 
@@ -610,7 +610,7 @@ const customerCode = await resolveCustomerCode(req);
                    A.BPR_0, A.ACCDAT_0,
                    A.CUR_0, A.AMTCUR_0,
                    A.DUDDAT_0
-            FROM tbs.TMSNEW.PAYMENTH A
+            FROM tbs.LEWISB.PAYMENTH A
       WHERE 1=1
     `;
 
@@ -631,8 +631,8 @@ const customerCode = await resolveCustomerCode(req);
       .input("paymentno", sql.NVarChar, row.NUM_0)
       .query(`
         SELECT A.VCRNUM_0, A.AMTLIN_0, B.CUR_0
-        FROM tbs.TMSNEW.PAYMENTD A
-        LEFT JOIN tbs.TMSNEW.PAYMENTH B
+        FROM tbs.LEWISB.PAYMENTD A
+        LEFT JOIN tbs.LEWISB.PAYMENTH B
           ON A.NUM_0 = B.NUM_0
         WHERE  A.NUM_0=@paymentno
       `);
@@ -664,7 +664,7 @@ async getPaymentDetail(id, user) {
     .input("orderNo", sql.NVarChar, id)
     .query(`
       SELECT *
-      FROM tbs.TMSNEW.PAYMENTH
+      FROM tbs.LEWISB.PAYMENTH
       WHERE NUM_0=@orderNo
     `);
 
@@ -677,8 +677,8 @@ async getPaymentDetail(id, user) {
     .input("orderNo", sql.NVarChar, id)
     .query(`
       SELECT A.VCRNUM_0, A.AMTLIN_0, B.CUR_0
-      FROM tbs.TMSNEW.PAYMENTD A
-      LEFT JOIN tbs.TMSNEW.PAYMENTH B
+      FROM tbs.LEWISB.PAYMENTD A
+      LEFT JOIN tbs.LEWISB.PAYMENTH B
         ON A.NUM_0 = B.NUM_0
       WHERE  A.NUM_0=@orderNo
     `);
@@ -716,8 +716,8 @@ const customerCode = await resolveCustomerCode(req);
       SELECT A.NUM_0, A.INVDAT_0,
                    A.AMTATI_0, A.CUR_0,
                    STRDUDDAT_0
-            FROM tbs.TMSNEW.SINVOICE A
-            LEFT JOIN tbs.TMSNEW.GACCDUDATE B
+            FROM tbs.LEWISB.SINVOICE A
+            LEFT JOIN tbs.LEWISB.GACCDUDATE B
               ON A.NUM_0 = B.NUM_0
               WHERE B.FLGCLE_0 = 1
 
@@ -756,7 +756,7 @@ const customerCode = await resolveCustomerCode(req);
    const pool = await sql.connect(config);
   
   let query = `
-    select PRODUCT,PROD_DESC, SITE, PHYSICAL_QTY, ALLOCATED_QTY,AVAILABLE_QTY,UNIT,LOCATION,CATEGORY  from TMSNEW.XSTDALN_STOCK WHERE 1=1
+    select PRODUCT,PROD_DESC, SITE, PHYSICAL_QTY, ALLOCATED_QTY,AVAILABLE_QTY,UNIT,LOCATION,CATEGORY  from LEWISB.XSTDALN_STOCK WHERE 1=1
     `;
 
    

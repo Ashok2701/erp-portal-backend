@@ -49,7 +49,7 @@ exports.createUser = async (user) => {
 exports.getAllUsers = async (tenantId) => {
   const result = await pool.query(
     `
-   SELECT u.user_id, username, full_name, u.is_active, contact_number ,whatsapp_number ,country_code ,erp_entity_code ,erp_entity_type, r.role_name
+   SELECT u.user_id, username,email, full_name, u.is_active, contact_number ,whatsapp_number ,country_code ,erp_entity_code ,erp_entity_type, r.role_name
     FROM users u
     left join user_roles ur on ur.user_id = u.user_id 
     left join roles r on r.role_id  = ur.role_id 
