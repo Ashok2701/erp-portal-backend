@@ -256,7 +256,14 @@ async getAllQuotes(req) {
     },
      };
   const pool = await sql.connect(config);
+
+
+   console.log("at sales all quotes 1");
+    console.log(req);
   const customerCode = await resolveCustomerCode(req);
+
+  console.log("at sales all quotes 2");
+  console.log(customerCode);
 
   let query = `
       SELECT A.SQHNUM_0, A.SQHTYP_0, A.QUOINVATI_0, D.TEXTE_0, A.QUODAT_0,
