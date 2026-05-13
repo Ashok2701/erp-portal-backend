@@ -399,6 +399,278 @@ exports.generateOrder = async (user, requestIds) => {
 
   const results = [];
 
+    console.log("at generate order", requestIds )
+
+  for (const dropRequestId of requestIds) {
+    const clientDb = await db.connect();
+
+    try {
+      await clientDb.query("BEGIN");
+
+      // Fetch Header
+      const header = await clientDb.query(
+        "SELECT * FROM sales_requests WHERE drop_request_id = $1",
+        [dropRequestId]
+      );
+
+      if (header.rows.length === 0) {
+        results.push({
+          drop_request_id: dropRequestId,
+          success: false,
+          error: "Sales request not found",
+        });
+
+        await clientDb.query("ROLLBACK");
+        continue;
+      }
+
+      const sr = header.rows[0];
+
+      // Fetch Items
+      const items = await clientDb.query(
+        "SELECT * FROM sales_request_items WHERE drop_request_id = $1 ORDER BY line_no",
+        [dropRequestId]
+      );
+
+      if (items.rows.length === 0) {
+        results.push({
+          drop_request_id: dropRequestId,
+          success: false,
+          error: "No items found",
+        });
+
+        await clientDb.query("ROLLBACK");
+        continue;
+      }
+
+      // Dates
+      const today = new Date()
+        .toISOString()
+        .slice(0, 10)
+        .replace(/-/g, "");
+
+      const dlvDate = sr.request_date
+        ? new Date(sr.request_date)
+            .toISOString()
+            .slice(0, 10)
+            .replace(/-/g, "")
+        : today;
+
+      // Build XML Lines
+      const lineItems = items.rows
+        .map(
+          (item, idx) => `
+<LIN NUM="${idx + 1}">
+  <FLD NAME="ITMREF">${item.product_code}</FLD>
+  <FLD NAME="QTY">${parseFloat(item.quantity) || 1}</FLD>
+  <FLD NAME="GROPRI">${parseFloat(item.price) || 0}</FLD>
+  <FLD NAME="SAU">${item.uom || "EA"}</FLD>
+</LIN>`
+        )
+        .join("");
+
+      // IMPORTANT:
+      // Keep CDATA compact
+      const inputXml = `<![CDATA[
+<PARAM>
+  <GRP ID="SOH0_1">
+    <FLD NAME="SALFCY">${sr.site || process.env.X3_SALES_SITE || "1100"}</FLD>
+    <FLD NAME="SOHTYP">${process.env.X3_ORDER_TYPE || "SOI"}</FLD>
+  </GRP>
+
+  <GRP ID="SOH0_2">
+    <FLD NAME="BPCORD">${sr.customer_code}</FLD>
+    <FLD NAME="ORDDAT">${today}</FLD>
+    <FLD NAME="DEMDLVDAT">${dlvDate}</FLD>
+    <FLD NAME="CUR">${sr.currency || "USD"}</FLD>
+    <FLD NAME="BPAADD">${sr.address || ""}</FLD>
+    <FLD NAME="CUSORDREF">${sr.reference || ""}</FLD>
+  </GRP>
+
+  <TAB ID="SOH1_1" SIZE="${items.rows.length}">
+    ${lineItems}
+  </TAB>
+</PARAM>
+]]>`;
+
+      // Update Status
+      await clientDb.query(
+        "UPDATE sales_requests SET status = 'PROCESSING' WHERE drop_request_id = $1",
+        [dropRequestId]
+      );
+
+      await clientDb.query("COMMIT");
+
+      try {
+        console.log("=================================");
+        console.log("Generating Order:", dropRequestId);
+        console.log("=================================");
+
+        // SOAP Client
+        const soapClient = await getSoapClient();
+
+        // SOAP Request
+        const response = await new Promise((resolve, reject) => {
+          soapClient.run(
+            {
+              callContext: {
+                $xml: `
+<codeLang xsi:type="xsd:string">ENG</codeLang>
+<poolAlias xsi:type="xsd:string">${process.env.X3_POOL_ALIAS || "TMSNEW"}</poolAlias>
+<requestConfig xsi:type="xsd:string">
+adxwss.optreturn=XML
+</requestConfig>
+`,
+                attributes: {
+                  "xsi:type": "wss:CAdxCallContext",
+                },
+              },
+
+              publicName: {
+                attributes: {
+                  "xsi:type": "xsd:string",
+                },
+                $value: "SOH",
+              },
+
+              inputXml: {
+                attributes: {
+                  "xsi:type": "xsd:string",
+                },
+                $xml: inputXml,
+              },
+            },
+
+            (err, result) => {
+              if (err) {
+                console.error("SOAP METHOD ERROR:", err);
+                return reject(err);
+              }
+
+              resolve(result);
+            }
+          );
+        });
+
+        console.log(
+          "SOAP RESPONSE:",
+          JSON.stringify(response, null, 2)
+        );
+
+        const respXml =
+          response?.runReturn?.resultXml?.$value || "";
+
+        console.log("RESULT XML:", respXml);
+
+        // Check SOAP Messages
+        const soapMessages = response?.runReturn?.messages;
+
+        if (soapMessages?.length > 0) {
+          const soapError =
+            soapMessages[0]?.message || "SOAP Error";
+
+          await db.query(
+            "UPDATE sales_requests SET status = 'DRAFT' WHERE drop_request_id = $1",
+            [dropRequestId]
+          );
+
+          results.push({
+            drop_request_id: dropRequestId,
+            success: false,
+            error: soapError,
+          });
+
+          continue;
+        }
+
+        // Extract SOHNUM
+        const match =
+          respXml.match(/NAME="SOHNUM"[^>]*>([^<]+)</) ||
+          respXml.match(/SOHNUM[^>]*>([^<]+)</);
+
+        const erpOrderNo = match?.[1]?.trim();
+
+        if (erpOrderNo) {
+          await db.query(
+            `UPDATE sales_requests
+             SET status = 'ORDER GENERATED',
+                 erp_order_no = $1
+             WHERE drop_request_id = $2`,
+            [erpOrderNo, dropRequestId]
+          );
+
+          console.log(
+            `SUCCESS: ${dropRequestId} -> ${erpOrderNo}`
+          );
+
+          results.push({
+            drop_request_id: dropRequestId,
+            success: true,
+            erp_order_no: erpOrderNo,
+            status: "ORDER GENERATED",
+          });
+        } else {
+          await db.query(
+            `UPDATE sales_requests
+             SET status = 'DRAFT'
+             WHERE drop_request_id = $1`,
+            [dropRequestId]
+          );
+
+          results.push({
+            drop_request_id: dropRequestId,
+            success: false,
+            error: "SOHNUM not returned from Sage X3",
+          });
+        }
+      } catch (soapErr) {
+        console.error("SOAP ERROR:");
+        console.error(soapErr);
+
+        await db.query(
+          `UPDATE sales_requests
+           SET status = 'DRAFT'
+           WHERE drop_request_id = $1`,
+          [dropRequestId]
+        );
+
+        results.push({
+          drop_request_id: dropRequestId,
+          success: false,
+          error:
+            soapErr?.message ||
+            "SOAP connection failed",
+        });
+      }
+    } catch (err) {
+      await clientDb.query("ROLLBACK");
+
+      console.error("DB ERROR:", err);
+
+      results.push({
+        drop_request_id: dropRequestId,
+        success: false,
+        error: err.message,
+      });
+    } finally {
+      clientDb.release();
+    }
+  }
+
+  return {
+    processed: results.length,
+    results,
+  };
+};
+
+
+exports.generateOrder_2 = async (user, requestIds) => {
+  if (!requestIds || requestIds.length === 0) {
+    throw new Error("No request IDs provided");
+  }
+
+  const results = [];
+
   for (const dropRequestId of requestIds) {
     const clientDb = await db.connect();
 
