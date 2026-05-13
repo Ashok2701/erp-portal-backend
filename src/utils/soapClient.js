@@ -18,19 +18,21 @@ async function getSoapClient() {
       return cachedClient;
     }
 
+    // HTTPS AGENT
     const httpsAgent = new https.Agent({
       rejectUnauthorized: false,
     });
 
+    // CREATE SOAP CLIENT
     const client = await soap.createClientAsync(
       wsdlUrl,
       {
         endpoint: process.env.X3_SOAP_URL,
 
         wsdl_options: {
-          agent: httpsAgent,
           rejectUnauthorized: false,
           strictSSL: false,
+          forever: true,
         },
 
         attributesKey: "attributes",
@@ -39,25 +41,19 @@ async function getSoapClient() {
       }
     );
 
-    // BASIC AUTH
+    // FORCE HTTPS AGENT
     client.setSecurity(
       new soap.BasicAuthSecurity(
         process.env.X3_USERNAME,
-        process.env.X3_PASSWORD
+        process.env.X3_PASSWORD,
+        {
+          rejectUnauthorized: false,
+          strictSSL: false,
+          secureOptions: https.constants.SSL_OP_NO_TLSv1_2,
+          agent: httpsAgent,
+        }
       )
     );
-
-    // FORCE AGENT
-    client.httpClient._request = function (url, data, callback, exheaders, exoptions) {
-
-      const options = {
-        ...exoptions,
-        httpsAgent,
-        rejectUnauthorized: false,
-      };
-
-      return this.request(url, data, callback, exheaders, options);
-    };
 
     console.log("SOAP CLIENT INITIALIZED");
 
