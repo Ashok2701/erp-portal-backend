@@ -3,12 +3,9 @@ const https = require("https");
 
 let cachedClient = null;
 
-// DEV ONLY
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
-const wsdlUrl =
-  process.env.X3_WSDL_URL ||
-  "https://tmsx3em.tema-systems.com/soap-wsdl/syracuse/collaboration/syracuse/CAdxWebServiceXmlCC?wsdl";
+const wsdlUrl = process.env.X3_WSDL_URL;
 
 async function getSoapClient() {
 
@@ -18,12 +15,10 @@ async function getSoapClient() {
       return cachedClient;
     }
 
-    // HTTPS AGENT
     const httpsAgent = new https.Agent({
       rejectUnauthorized: false,
     });
 
-    // CREATE SOAP CLIENT
     const client = await soap.createClientAsync(
       wsdlUrl,
       {
@@ -33,7 +28,6 @@ async function getSoapClient() {
           agent: httpsAgent,
           rejectUnauthorized: false,
           strictSSL: false,
-          forever: true,
         },
 
         attributesKey: "attributes",
@@ -42,7 +36,10 @@ async function getSoapClient() {
       }
     );
 
-    // BASIC AUTH
+    // IMPORTANT
+    // Force SOAP endpoint manually
+    client.setEndpoint(process.env.X3_SOAP_URL);
+
     client.setSecurity(
       new soap.BasicAuthSecurity(
         process.env.X3_USERNAME,
