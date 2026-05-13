@@ -30,6 +30,7 @@ async function getSoapClient() {
         endpoint: process.env.X3_SOAP_URL,
 
         wsdl_options: {
+          agent: httpsAgent,
           rejectUnauthorized: false,
           strictSSL: false,
           forever: true,
@@ -41,17 +42,11 @@ async function getSoapClient() {
       }
     );
 
-    // FORCE HTTPS AGENT
+    // BASIC AUTH
     client.setSecurity(
       new soap.BasicAuthSecurity(
         process.env.X3_USERNAME,
-        process.env.X3_PASSWORD,
-        {
-          rejectUnauthorized: false,
-          strictSSL: false,
-          secureOptions: https.constants.SSL_OP_NO_TLSv1_2,
-          agent: httpsAgent,
-        }
+        process.env.X3_PASSWORD
       )
     );
 
