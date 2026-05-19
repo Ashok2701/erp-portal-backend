@@ -12,16 +12,19 @@ async resolveCustomerCode(req) {
 
   const { user } = req;
 
-  // 🔹 1. Frontend filter
+  // 🔹 2. Customer login → auto map
+  if (user.role === "Customer") {
+    const userInfo = await UserModel.getUserById(user.user_id);
+     console.log("insdie 2")
+      console.log(userInfo[0])
+    return userInfo[0].erp_entity_code;
+  }
+
+  /* 🔹 1. Frontend filter
   if (req.query.customer_code) {
     return req.query.customer_code;
   }
-
-  // 🔹 2. Customer login → auto map
-  if (user.role === "customer") {
-    const userInfo = await UserModel.getUserById(user.user_id);
-    return userInfo[0].erp_entity_code;
-  }
+   */
 
   // 🔹 3. Sales rep → must select
   if (user.role === "salesrep") {
