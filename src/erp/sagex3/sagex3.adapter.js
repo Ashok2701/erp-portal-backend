@@ -10,7 +10,9 @@ async resolveCustomerCode(req) {
   console.log("Inside resolveCustomerCode");
   console.log(req)
 
-  const { user } = req;
+  //const { user } = req;
+
+  const user = req.user || req;
 
   // 🔹 2. Customer login → auto map
   if (user.role === "Customer") {
