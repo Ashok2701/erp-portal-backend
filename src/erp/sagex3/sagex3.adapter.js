@@ -6,6 +6,10 @@ class SageX3Adapter extends BaseERPAdapter {
     
 
 async resolveCustomerCode(req) {
+
+  console.log("Inside resolveCustomerCode");
+  console.log(req)
+
   const { user } = req;
 
   // 🔹 1. Frontend filter
