@@ -300,7 +300,7 @@ async getAllQuotes(req) {
   console.log(customerCode);
 
   let query = `
-      SELECT A.SQHNUM_0, A.SQHTYP_0, A.QUOINVATI_0, D.TEXTE_0, A.QUODAT_0,
+      SELECT TOP 20 A.SQHNUM_0, A.SQHTYP_0, A.QUOINVATI_0, D.TEXTE_0, A.QUODAT_0,
                    A.CUSQUOREF_0, A.QUOSTA_0, A.FFWNUM_0, B.BPTNAM_0,
                    A.VLYDAT_0, A.SOHNUM_0, A.ORDDAT_0, A.CUR_0
             FROM tbs.LEWISB.SQUOTE A
@@ -409,7 +409,7 @@ async getAllOrders(req) {
        // check duplicate
 
 let query = `
-    SELECT A.SALFCY_0, A.ORDINVATI_0, A.CUR_0,
+    SELECT  TOP 20 A.SALFCY_0, A.ORDINVATI_0, A.CUR_0,
            A.CUSORDREF_0, A.BPCORD_0, A.BPCNAM_0,
            A.SOHNUM_0, A.SOHTYP_0, A.ORDDAT_0,
            A.SHIDAT_0, A.ALLSTA_0, A.INVSTA_0,
@@ -522,7 +522,7 @@ async getAllInvoices(req) {
   const pool = await sql.connect(config);
   const customerCode = await this.resolveCustomerCode(req);
    let query = `
-      SELECT A.NUM_0, A.SIVTYP_0, A.BPR_0,
+      SELECT TOP 20 A.NUM_0, A.SIVTYP_0, A.BPR_0,
              A.ACCDAT_0, A.CUR_0,
              A.AMTATI_0, A.AMTNOT_0,
              A.STA_0, A.FCY_0
@@ -599,7 +599,7 @@ async getPendingInvoices(req) {
     const pool = await sql.connect(config);
     const customerCode = await this.resolveCustomerCode(req);
       let query = `
-         SELECT DISTINCT A.NUM_0, A.ACCDAT_0,
+         SELECT TOP 20 DISTINCT A.NUM_0, A.ACCDAT_0,
                       A.AMTATI_0, A.CUR_0,
                       A.STA_0, STRDUDDAT_0
                FROM tbs.LEWISB.SINVOICE A
@@ -646,7 +646,7 @@ const customerCode = await this.resolveCustomerCode(req);
          // check duplicate
 
   let query = `
-      SELECT A.NUM_0, A.STA_0, A.FCY_0,
+      SELECT TOP 20 A.NUM_0, A.STA_0, A.FCY_0,
                    A.BPR_0, A.ACCDAT_0,
                    A.CUR_0, A.AMTCUR_0,
                    A.DUDDAT_0
@@ -713,7 +713,7 @@ async getPaymentDetail(id, user) {
   const header = headerRes.recordset[0];
 
   const itemsRes = await pool.request()
-   
+
     .input("orderNo", sql.NVarChar, id)
     .query(`
       SELECT A.VCRNUM_0, A.AMTLIN_0, B.CUR_0
@@ -753,7 +753,7 @@ const customerCode = await this.resolveCustomerCode(req);
          // check duplicate
 
   let query = `
-      SELECT A.NUM_0, A.INVDAT_0,
+      SELECT TOP 10 A.NUM_0, A.INVDAT_0,
                    A.AMTATI_0, A.CUR_0,
                    STRDUDDAT_0
             FROM tbs.LEWISB.SINVOICE A
