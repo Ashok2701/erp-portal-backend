@@ -1,10 +1,33 @@
 const BaseERPAdapter = require("../base.adapter");
 const UserModel  = require("../../models/user.model");
-const resolveCustomerCode = require("../../utils/erpContextUser");
 
 
 class SageX3Adapter extends BaseERPAdapter {
     
+
+async resolveCustomerCode(req) {
+  const { user } = req;
+
+  // 🔹 1. Frontend filter
+  if (req.query.customer_code) {
+    return req.query.customer_code;
+  }
+
+  // 🔹 2. Customer login → auto map
+  if (user.role === "customer") {
+    const userInfo = await UserModel.getUserById(user.user_id);
+    return userInfo[0].erp_entity_code;
+  }
+
+  // 🔹 3. Sales rep → must select
+  if (user.role === "salesrep") {
+    throw new Error("customer_code is required for salesrep");
+  }
+
+  // 🔹 4. Admin → no filter
+  return null;
+}
+
 
  async getCustomers(){
 
@@ -262,7 +285,7 @@ async getAllQuotes(req) {
 
    console.log("at sales all quotes 1");
     console.log(req);
-  const customerCode = await resolveCustomerCode(req);
+  const customerCode = await this.resolveCustomerCode(req);
 
   console.log("at sales all quotes 2");
   console.log(customerCode);
@@ -368,7 +391,7 @@ async getAllOrders(req) {
   },
    };
 
- const customerCode = await resolveCustomerCode(req);
+ const customerCode = await this.resolveCustomerCode(req);
 
   const pool = await sql.connect(config);
 
@@ -489,7 +512,7 @@ async getAllInvoices(req) {
 
 
   const pool = await sql.connect(config);
-  const customerCode = await resolveCustomerCode(req);
+  const customerCode = await this.resolveCustomerCode(req);
    let query = `
       SELECT A.NUM_0, A.SIVTYP_0, A.BPR_0,
              A.ACCDAT_0, A.CUR_0,
@@ -566,7 +589,7 @@ async getPendingInvoices(req) {
    };
 
     const pool = await sql.connect(config);
-    const customerCode = await resolveCustomerCode(req);
+    const customerCode = await this.resolveCustomerCode(req);
       let query = `
          SELECT DISTINCT A.NUM_0, A.ACCDAT_0,
                       A.AMTATI_0, A.CUR_0,
@@ -609,7 +632,7 @@ async getAllPayments(req) {
 
 
   const pool = await sql.connect(config);
-const customerCode = await resolveCustomerCode(req);
+const customerCode = await this.resolveCustomerCode(req);
     //  const { tenant_id } = user;
 
          // check duplicate
@@ -716,7 +739,7 @@ async getPaymentPendingInvoices(req) {
    };
 
 const pool = await sql.connect(config);
-const customerCode = await resolveCustomerCode(req);
+const customerCode = await this.resolveCustomerCode(req);
     //  const { tenant_id } = user;
 
          // check duplicate
