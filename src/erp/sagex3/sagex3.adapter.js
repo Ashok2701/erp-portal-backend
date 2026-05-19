@@ -324,7 +324,7 @@ async getAllQuotes(req) {
 
   for (const row of result.recordset) {
     const items = await pool.request()
-      .input("site", sql.NVarChar, user.site)
+
       .input("quoteNo", sql.NVarChar, row.SQHNUM_0)
       .query(`
         SELECT ITMREF_0, ITMDES1_0, QTY_0, SAU_0, NETPRIATI_0
@@ -434,7 +434,6 @@ let query = `
   for (const row of result.recordset) {
 
     const items = await pool.request()
-      .input("site", sql.NVarChar, user.site)
       .input("orderNo", sql.NVarChar, row.SOHNUM_0)
       .query(`
         SELECT A.ITMREF_0, C.ITMDES_0,
@@ -485,7 +484,7 @@ async getOrderDetail(id, user) {
   const header = result.recordset[0];
 
   const items = await pool.request()
-    .input("site", sql.NVarChar, header.SALFCY_0)
+
     .input("orderNo", sql.NVarChar, id)
     .query(`
       SELECT A.ITMREF_0, C.ITMDES_0,
@@ -714,7 +713,7 @@ async getPaymentDetail(id, user) {
   const header = headerRes.recordset[0];
 
   const itemsRes = await pool.request()
-    .input("site", sql.NVarChar, header.FCY_0)
+   
     .input("orderNo", sql.NVarChar, id)
     .query(`
       SELECT A.VCRNUM_0, A.AMTLIN_0, B.CUR_0
