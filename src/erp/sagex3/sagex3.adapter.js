@@ -1,6 +1,7 @@
 const BaseERPAdapter = require("../base.adapter");
 const UserModel  = require("../../models/user.model");
-const resolveCustomerCode = require("../../utils/resolveCustomerCode");
+const resolveCustomerCode = require("../../utils/erpContextUser");
+
 
 class SageX3Adapter extends BaseERPAdapter {
     
