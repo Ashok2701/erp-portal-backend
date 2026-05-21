@@ -391,8 +391,342 @@ exports.generateOrder_oldone = async (user, requestIds) => {
   return { processed: results.length, results };
 };
 
-
 exports.generateOrder = async (user, requestIds) => {
+  if (!requestIds || requestIds.length === 0) {
+    throw new Error("No request IDs provided");
+  }
+
+  const results = [];
+
+  console.log("Generate Order Request IDs:", requestIds);
+
+  for (const dropRequestId of requestIds) {
+    const clientDb = await db.connect();
+
+    try {
+      await clientDb.query("BEGIN");
+
+      // ============================================
+      // FETCH HEADER
+      // ============================================
+
+      const header = await clientDb.query(
+        `SELECT *
+         FROM sales_requests
+         WHERE drop_request_id = $1`,
+        [dropRequestId]
+      );
+
+      if (header.rows.length === 0) {
+        results.push({
+          drop_request_id: dropRequestId,
+          success: false,
+          error: "Sales request not found",
+        });
+
+        await clientDb.query("ROLLBACK");
+        continue;
+      }
+
+      const sr = header.rows[0];
+
+      // ============================================
+      // FETCH ITEMS
+      // ============================================
+
+      const items = await clientDb.query(
+        `SELECT *
+         FROM sales_request_items
+         WHERE drop_request_id = $1
+         ORDER BY line_no`,
+        [dropRequestId]
+      );
+
+      if (items.rows.length === 0) {
+        results.push({
+          drop_request_id: dropRequestId,
+          success: false,
+          error: "No items found",
+        });
+
+        await clientDb.query("ROLLBACK");
+        continue;
+      }
+
+      // ============================================
+      // BUILD XML LINES
+      // ============================================
+
+      const lineItems = items.rows
+        .map(
+          (item, idx) => `
+<LIN NUM="${idx + 1}">
+  <FLD NAME="I_XITMREF" TYPE="Char">
+    ${item.product_code}
+  </FLD>
+
+  <FLD NAME="I_XQTY" TYPE="Decimal">
+    ${parseFloat(item.quantity) || 1}
+  </FLD>
+
+  <FLD NAME="I_XUOM" TYPE="Char">
+    ${item.uom || "BOX"}
+  </FLD>
+</LIN>`
+        )
+        .join("");
+
+      // ============================================
+      // FINAL INPUT XML
+      // ============================================
+
+      const inputXml = `
+<![CDATA[
+<PARAM>
+
+  <GRP ID="GRP1">
+
+    <FLD NAME="I_XBPCORD" TYPE="Char">
+      ${sr.customer_code}
+    </FLD>
+
+    <FLD NAME="I_XFCY" TYPE="Char">
+      ${sr.site || process.env.X3_SALES_SITE || "1100"}
+    </FLD>
+
+  </GRP>
+
+  <TAB DIM="500"
+       ID="GRP2"
+       SIZE="${items.rows.length}">
+
+    ${lineItems}
+
+  </TAB>
+
+</PARAM>
+]]>
+`;
+
+      console.log("=================================");
+      console.log("INPUT XML");
+      console.log("=================================");
+      console.log(inputXml);
+
+      // ============================================
+      // UPDATE STATUS
+      // ============================================
+
+      await clientDb.query(
+        `UPDATE sales_requests
+         SET status = 'PROCESSING'
+         WHERE drop_request_id = $1`,
+        [dropRequestId]
+      );
+
+      await clientDb.query("COMMIT");
+
+      // ============================================
+      // SOAP CALL
+      // ============================================
+
+      try {
+        const soapClient = await getSoapClient();
+
+        const response = await new Promise((resolve, reject) => {
+          soapClient.run(
+            {
+              callContext: {
+                attributes: {
+                  "xsi:type": "wss:CAdxCallContext",
+                },
+
+                $xml: `
+<codeLang xsi:type="xsd:string">
+ENG
+</codeLang>
+
+<poolAlias xsi:type="xsd:string">
+${process.env.X3_POOL_ALIAS || "LEWISB"}
+</poolAlias>
+
+<poolId xsi:type="xsd:string">
+${process.env.X3_POOL_ALIAS || "LEWISB"}
+</poolId>
+
+<requestConfig xsi:type="xsd:string">
+adxwss.optreturn=XML
+</requestConfig>
+`,
+              },
+
+              publicName: {
+                attributes: {
+                  "xsi:type": "xsd:string",
+                },
+
+                $value: "XPODCRESOH",
+              },
+
+              inputXml: {
+                attributes: {
+                  "xsi:type": "xsd:string",
+                },
+
+                $value: inputXml,
+              },
+            },
+
+            (err, result) => {
+              if (err) {
+                console.error("SOAP ERROR:", err);
+                return reject(err);
+              }
+
+              resolve(result);
+            }
+          );
+        });
+
+        // ============================================
+        // LOG RESPONSE
+        // ============================================
+
+        console.log("=================================");
+        console.log("SOAP RESPONSE");
+        console.log("=================================");
+
+        console.log(JSON.stringify(response, null, 2));
+
+        const respXml =
+          response?.runReturn?.resultXml?.$value || "";
+
+        console.log("=================================");
+        console.log("RESULT XML");
+        console.log("=================================");
+
+        console.log(respXml);
+
+        // ============================================
+        // CHECK SOAP ERRORS
+        // ============================================
+
+        const soapMessages =
+          response?.runReturn?.messages;
+
+        if (soapMessages?.length > 0) {
+          const soapError =
+            soapMessages[0]?.message ||
+            "SOAP Error";
+
+          await db.query(
+            `UPDATE sales_requests
+             SET status = 'DRAFT'
+             WHERE drop_request_id = $1`,
+            [dropRequestId]
+          );
+
+          results.push({
+            drop_request_id: dropRequestId,
+            success: false,
+            error: soapError,
+          });
+
+          continue;
+        }
+
+        // ============================================
+        // EXTRACT ORDER NUMBER
+        // ============================================
+
+        const match =
+          respXml.match(
+            /NAME="XSOHNUM"[^>]*>([^<]+)</
+          ) ||
+          respXml.match(
+            /NAME="SOHNUM"[^>]*>([^<]+)</
+          );
+
+        const erpOrderNo = match?.[1]?.trim();
+
+        // ============================================
+        // SUCCESS
+        // ============================================
+
+        if (erpOrderNo) {
+          await db.query(
+            `UPDATE sales_requests
+             SET status = 'ORDER GENERATED',
+                 erp_order_no = $1
+             WHERE drop_request_id = $2`,
+            [erpOrderNo, dropRequestId]
+          );
+
+          results.push({
+            drop_request_id: dropRequestId,
+            success: true,
+            erp_order_no: erpOrderNo,
+            status: "ORDER GENERATED",
+          });
+
+          console.log(
+            `SUCCESS: ${dropRequestId} -> ${erpOrderNo}`
+          );
+        } else {
+          await db.query(
+            `UPDATE sales_requests
+             SET status = 'DRAFT'
+             WHERE drop_request_id = $1`,
+            [dropRequestId]
+          );
+
+          results.push({
+            drop_request_id: dropRequestId,
+            success: false,
+            error: "Order number not returned",
+          });
+        }
+      } catch (soapErr) {
+        console.error("SOAP CALL FAILED");
+        console.error(soapErr);
+
+        await db.query(
+          `UPDATE sales_requests
+           SET status = 'DRAFT'
+           WHERE drop_request_id = $1`,
+          [dropRequestId]
+        );
+
+        results.push({
+          drop_request_id: dropRequestId,
+          success: false,
+          error:
+            soapErr?.message ||
+            "SOAP connection failed",
+        });
+      }
+    } catch (err) {
+      await clientDb.query("ROLLBACK");
+
+      console.error("DATABASE ERROR:", err);
+
+      results.push({
+        drop_request_id: dropRequestId,
+        success: false,
+        error: err.message,
+      });
+    } finally {
+      clientDb.release();
+    }
+  }
+
+  return {
+    processed: results.length,
+    results,
+  };
+};
+
+exports.generateOrder_3 = async (user, requestIds) => {
   if (!requestIds || requestIds.length === 0) {
     throw new Error("No request IDs provided");
   }
