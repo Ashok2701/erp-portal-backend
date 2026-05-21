@@ -406,19 +406,10 @@ exports.generateOrder = async (user, requestIds) => {
     // ============================================
 
     const callContext = `
-      <codeLang xsi:type="xsd:string">ENG</codeLang>
-
-      <poolAlias xsi:type="xsd:string">
-        ${process.env.X3_POOL_ALIAS}
-      </poolAlias>
-
-      <poolId xsi:type="xsd:string">
-        ${process.env.X3_POOL_ALIAS}
-      </poolId>
-
-      <requestConfig xsi:type="xsd:string">
-        adxwss.optreturn=XML
-      </requestConfig>
+    <codeLang xsi:type="xsd:string">ENG</codeLang>
+    <poolAlias xsi:type="xsd:string">${process.env.X3_POOL_ALIAS.trim()}</poolAlias>
+    <poolId xsi:type="xsd:string">${process.env.X3_POOL_ALIAS.trim()}</poolId>
+    <requestConfig xsi:type="xsd:string">adxwss.optreturn=XML</requestConfig>
     `;
 
     // ============================================
@@ -489,6 +480,9 @@ exports.generateOrder = async (user, requestIds) => {
         }
 
         const sr = header.rows[0];
+
+        console.log("request details");
+         console.log(sr);
 
         // ============================================
         // FETCH ITEMS
