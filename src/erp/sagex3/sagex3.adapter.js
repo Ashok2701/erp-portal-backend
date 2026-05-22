@@ -384,6 +384,121 @@ async getQuoteDetail(id, user) {
 }
 
 
+async getAllDeliveries(req) {
+
+  const sql = require("mssql");
+
+  const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+ const customerCode = await this.resolveCustomerCode(req);
+
+  const pool = await sql.connect(config);
+
+  //  const { tenant_id } = user;
+
+       // check duplicate
+
+let query = `
+   	select A.STOFCY_0, A.DLVATIL_0, A.CUR_0,
+              A.SOHNUM_0, A.BPCORD_0, A.BPDNAM_0,A.BPAADD_0,A.SDHTYP_0,
+              A.SDHNUM_0, A.DSPTOTQTY_0, A.DLVDAT_0,
+              A.SHIDAT_0, A.GROWEI_0,A.WEU_0, A.VOL_0,A.VOU_0,
+              C.BPTNAM_0
+   	from LEWISB.SDELIVERY A
+   	LEFT JOIN tbs.LEWISB.BPCARRIER C ON A.BPTNUM_0 = C.BPTNUM_0
+    WHERE 1=1
+  `;
+
+  const request = pool.request();
+
+  if (customerCode) {
+    query += ` AND A.BPCORD_0 = @customerCode`;
+    request.input("customerCode", sql.NVarChar, customerCode);
+  }
+
+  query += ` ORDER BY A.DLVDAT_0 DESC`;
+
+  const result = await request.query(query);
+
+
+  for (const row of result.recordset) {
+
+    const items = await pool.request()
+      .input("dlvNo", sql.NVarChar, row.SDHNUM_0)
+      .query(`
+         SELECT A.ITMREF_0, A.ITMDES1_0,
+                       A.QTY_0,A.SAU_0 AS UNITS, A.NETPRI_0,
+                       (A.QTY_0 * A.NETPRI_0) AS total_amount
+                FROM tbs.LEWISB.SDELIVERYD A
+        WHERE  A.SOHNUM_0=@dlvNo
+      `);
+
+    row.items = items.recordset;
+  }
+
+  return result.recordset;
+}
+
+// GET DELIVERY BY ID
+async getDeliveryDetail(id, user) {
+
+  const sql = require("mssql");
+
+  const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+
+  const pool = await sql.connect(config);
+
+  const result = await pool.request()
+    .input("orderNo", sql.NVarChar, id)
+    .query(`
+      SELECT *
+      FROM tbs.LEWISB.SDELIVERY
+      WHERE SDHNUM_0=@orderNo
+    `);
+
+  if (!result.recordset.length) return [];
+
+  const header = result.recordset[0];
+
+  const items = await pool.request()
+    .input("orderNo", sql.NVarChar, id)
+    .query(`
+       SELECT  DISTINCT A.ITMREF_0, A.ITMDES1_0,
+                     A.QTY_0,A.SAU_0 AS UNITS, A.NETPRI_0,
+                     (A.QTY_0 * A.NETPRI_0) AS total_amount
+              FROM tbs.LEWISB.SDELIVERYD A
+      WHERE  A.SDHNUM_0=@orderNo
+    `);
+
+  return {
+    header,
+    items: items.recordset
+  };
+}
+
+
+
 async getAllOrders(req) {
 
   const sql = require("mssql");
