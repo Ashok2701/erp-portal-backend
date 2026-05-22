@@ -32,7 +32,7 @@ app.use("/", signupRoutes);
 app.use("/orders", salesOrderRoutes);
 app.use("/sinvoice", salesInvoiceRoutes);
 app.use("/squote", salesQuoteRoutes);
-app.use("/deliveries", salesQuoteRoutes);
+app.use("/deliveries", salesDeliveries);
 app.use("/payment", PaymentRoutes);
 
 app.use("/content", contentRoutes);
