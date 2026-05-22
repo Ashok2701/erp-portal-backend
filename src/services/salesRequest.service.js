@@ -177,14 +177,113 @@ exports.getById = async (dropRequestId) => {
 
 exports.update = async (dropRequestId, body) => {
 
+  const client = await db.connect();
+
+  try {
+
+    await client.query("BEGIN");
+
+    let totalAmount = 0;
+    let totalQty = 0;
+
+    // calculate totals
+    body.items.forEach(item => {
+      const amt = Number(item.price) * Number(item.quantity);
+      totalAmount += amt;
+      totalQty += Number(item.quantity);
+    });
+
+    // update sales request header
+    await client.query(
+      `UPDATE sales_requests
+       SET comment=$1,
+           address=$2,
+           reference=$3,
+           currency=$4,
+           request_date=$5::timestamp,
+           total_amount=$6,
+           total_qty=$7,
+           status=$8
+       WHERE drop_request_id=$9`,
+      [
+        body.comment,
+        body.address,
+        body.reference,
+        body.currency,
+        body.request_date,
+        totalAmount,
+        totalQty,
+        body.status,
+        dropRequestId
+      ]
+    );
+
+    // remove old items
+    await client.query(
+      `DELETE FROM sales_request_items
+       WHERE drop_request_id=$1`,
+      [dropRequestId]
+    );
+
+    // insert updated items
+    let lineNo = 1;
+
+    for (const item of body.items) {
+
+      const lineAmount =
+        Number(item.price) * Number(item.quantity);
+
+      await client.query(
+        `INSERT INTO sales_request_items
+         (drop_request_id,
+          line_no,
+          product_code,
+          prod_desc,
+          quantity,
+          price,
+          line_amount)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          dropRequestId,
+          lineNo++,
+          item.product_code,
+          item.prod_desc,
+          item.quantity,
+          item.price,
+          lineAmount
+        ]
+      );
+    }
+
+    await client.query("COMMIT");
+
+    return {
+      message: "Sales Request Updated"
+    };
+
+  } catch (err) {
+
+    await client.query("ROLLBACK");
+    throw err;
+
+  } finally {
+
+    client.release();
+
+  }
+};
+
+
+exports.update_old = async (dropRequestId, body) => {
+
   await db.query(
     `UPDATE sales_requests
      SET comment=$1,
          address=$2,
          reference=$3,
          currency=$4,
-         request_date=$5
-     WHERE drop_request_id=$5`,
+         request_date=$5::timestamp
+     WHERE drop_request_id=$6`,
     [
       body.comment,
       body.address,
