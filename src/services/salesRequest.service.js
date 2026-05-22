@@ -402,15 +402,15 @@ exports.generateOrder = async (user, requestIds) => {
     const results = [];
 
     // ============================================
-    // CALL CONTEXT
+    // SOAP CALL CONTEXT
     // ============================================
 
     const callContext = `
-    <codeLang xsi:type="xsd:string">ENG</codeLang>
-    <poolAlias xsi:type="xsd:string">${process.env.X3_POOL_ALIAS.trim()}</poolAlias>
-    <poolId xsi:type="xsd:string">${process.env.X3_POOL_ALIAS.trim()}</poolId>
-    <requestConfig xsi:type="xsd:string">adxwss.optreturn=XML</requestConfig>
-    `;
+<codeLang xsi:type="xsd:string">ENG</codeLang>
+<poolAlias xsi:type="xsd:string">${process.env.X3_POOL_ALIAS.trim()}</poolAlias>
+<poolId xsi:type="xsd:string">${process.env.X3_POOL_ALIAS.trim()}</poolId>
+<requestConfig xsi:type="xsd:string">adxwss.optreturn=XML</requestConfig>
+`;
 
     // ============================================
     // CREATE SOAP CLIENT
@@ -481,9 +481,6 @@ exports.generateOrder = async (user, requestIds) => {
 
         const sr = header.rows[0];
 
-        console.log("request details");
-         console.log(sr);
-
         // ============================================
         // FETCH ITEMS
         // ============================================
@@ -523,15 +520,22 @@ exports.generateOrder = async (user, requestIds) => {
           );
         };
 
+        // ============================================
+        // ORDER DATE
+        // ============================================
+
         const orderDate = formatDate(
           sr.request_date || new Date()
         );
 
-        const deliveryDate = formatDate(
-          sr.delivery_date ||
-          sr.request_date ||
-          new Date()
-        );
+        // ============================================
+        // DELIVERY DATE
+        // IF NO DELIVERY DATE -> USE ORDER DATE
+        // ============================================
+
+        const deliveryDate = sr.delivery_date
+          ? formatDate(sr.delivery_date)
+          : orderDate;
 
         // ============================================
         // BUILD LINE XML
@@ -539,109 +543,58 @@ exports.generateOrder = async (user, requestIds) => {
 
         let lineXml = "";
 
-        items.rows.map((item, index) => {
+        items.rows.forEach((item, index) => {
           lineXml += `
-            <LIN NUM="${index + 1}">
-
-              <FLD NAME="I_XITMREF" TYPE="Char">
-                ${item.product_code}
-              </FLD>
-
-              <FLD NAME="I_XQTY" TYPE="Decimal">
-                ${parseFloat(item.quantity) || 1}
-              </FLD>
-
-              <FLD NAME="I_XUOM" TYPE="Char">
-                ${item.uom || "UN"}
-              </FLD>
-
-              <FLD NAME="I_XGROPRI" TYPE="Decimal">
-                ${parseFloat(item.price) || 0}
-              </FLD>
-
-            </LIN>
-          `;
+<LIN NUM="${index + 1}">
+<FLD NAME="I_XITMREF" TYPE="Char">${item.product_code}</FLD>
+<FLD NAME="I_XQTY" TYPE="Decimal">${parseFloat(item.quantity) || 1}</FLD>
+<FLD NAME="I_XUOM" TYPE="Char">${item.uom || "UN"}</FLD>
+<FLD NAME="I_XGROPRI" TYPE="Decimal">${parseFloat(item.price) || 0}</FLD>
+</LIN>`;
         });
 
         // ============================================
-        // BUILD INPUT XML
+        // BUILD XML BODY
         // ============================================
 
-        const inputXml = `
-        <![CDATA[
-        <PARAM>
+        const xmlBody = `
+<PARAM>
 
-          <GRP ID="GRP1">
+<GRP ID="GRP1">
 
-            <FLD NAME="I_XFLAG" TYPE="Integer">
-              0
-            </FLD>
+<FLD NAME="I_XFLAG" TYPE="Integer">0</FLD>
+<FLD NAME="I_XFLG" TYPE="Integer">0</FLD>
+<FLD NAME="I_XVCRNUM" TYPE="Char"></FLD>
+<FLD NAME="I_XFCY" TYPE="Char">${sr.site || process.env.X3_SALES_SITE}</FLD>
+<FLD NAME="I_XBPCNUM" TYPE="Char">${sr.customer_code}</FLD>
+<!-- DEFAULT ADDRESS -->
+<FLD NAME="I_XADR" TYPE="Char">${sr.address || "10"}</FLD>
+<FLD NAME="I_XORDDAT" TYPE="Date">${orderDate}</FLD>
+<!-- IF DELIVERY DATE NOT AVAILABLE USE ORDER DATE -->
+<FLD NAME="I_XDLVDAT" TYPE="Date">${deliveryDate}</FLD>
+<!-- IF SHIP DATE NOT AVAILABLE USE ORDER DATE -->
+<FLD NAME="I_XSHIDAT" TYPE="Date">${deliveryDate}</FLD>
+<FLD NAME="I_XUSERID" TYPE="Char">${user?.username || "ADMIN"}</FLD>
+<FLD NAME="I_XMDL" TYPE="Char"></FLD>
+<FLD NAME="I_XCOMMENTS" TYPE="Char">${sr.comments || "SOAP TEST ORDER"}</FLD>
+<FLD NAME="I_XPONUM" TYPE="Char">${sr.po_number || ""}</FLD>
+<FLD NAME="I_XORDTYP" TYPE="Char">${sr.order_type || process.env.X3_ORDER_TYPE}</FLD>
+<FLD NAME="I_XUNIQUENO" TYPE="Char">${dropRequestId}</FLD>
 
-            <FLD NAME="I_XFLG" TYPE="Integer">
-              0
-            </FLD>
+</GRP>
 
-            <FLD NAME="I_XVCRNUM" TYPE="Char"></FLD>
+<TAB ID="GRP2" DIM="500" SIZE="${items.rows.length}">
+${lineXml}
+</TAB>
 
-            <FLD NAME="I_XFCY" TYPE="Char">
-              ${sr.site || process.env.X3_SALES_SITE}
-            </FLD>
+</PARAM>
+`;
 
-            <FLD NAME="I_XBPCNUM" TYPE="Char">
-              ${sr.customer_code}
-            </FLD>
+        // ============================================
+        // FINAL INPUT XML
+        // ============================================
 
-            <FLD NAME="I_XADR" TYPE="Char">
-              ${sr.address || ""}
-            </FLD>
-
-            <FLD NAME="I_XORDDAT" TYPE="Date">
-              ${orderDate}
-            </FLD>
-
-            <FLD NAME="I_XDLVDAT" TYPE="Date">
-              ${deliveryDate}
-            </FLD>
-
-            <FLD NAME="I_XSHIDAT" TYPE="Date">
-              ${deliveryDate}
-            </FLD>
-
-            <FLD NAME="I_XUSERID" TYPE="Char">
-              ${user?.username || "ADMIN"}
-            </FLD>
-
-            <FLD NAME="I_XMDL" TYPE="Char"></FLD>
-
-            <FLD NAME="I_XCOMMENTS" TYPE="Char">
-              ${sr.comments || "SOAP TEST ORDER"}
-            </FLD>
-
-            <FLD NAME="I_XPONUM" TYPE="Char">
-              ${sr.po_number || ""}
-            </FLD>
-
-            <FLD NAME="I_XORDTYP" TYPE="Char">
-              ${sr.order_type || process.env.X3_ORDER_TYPE}
-            </FLD>
-
-            <FLD NAME="I_XUNIQUENO" TYPE="Char">
-              ${dropRequestId}
-            </FLD>
-
-          </GRP>
-
-          <TAB ID="GRP2"
-               DIM="500"
-               SIZE="${items.rows.length}">
-
-            ${lineXml}
-
-          </TAB>
-
-        </PARAM>
-        ]]>
-        `;
+        const inputXml = `<![CDATA[${xmlBody}]]>`;
 
         console.log("=================================");
         console.log("INPUT XML");
@@ -689,14 +642,16 @@ exports.generateOrder = async (user, requestIds) => {
               "xsi:type": "xsd:string",
             },
 
-            $xml: inputXml,
+            $value: inputXml,
           },
         };
 
         console.log("=================================");
         console.log("SOAP REQUEST");
         console.log("=================================");
-        console.log(JSON.stringify(soapRequest, null, 2));
+        console.log(
+          JSON.stringify(soapRequest, null, 2)
+        );
 
         // ============================================
         // EXECUTE SOAP
@@ -721,7 +676,9 @@ exports.generateOrder = async (user, requestIds) => {
         console.log("=================================");
         console.log("SOAP RESPONSE");
         console.log("=================================");
-        console.log(JSON.stringify(response, null, 2));
+        console.log(
+          JSON.stringify(response, null, 2)
+        );
 
         // ============================================
         // RESULT XML
@@ -736,15 +693,15 @@ exports.generateOrder = async (user, requestIds) => {
         console.log(responseXml);
 
         // ============================================
-        // SOAP ERROR MESSAGES
+        // SOAP ERROR
         // ============================================
 
         const soapMessages =
           response?.runReturn?.messages;
 
-        if (soapMessages?.length > 0) {
+        if (soapMessages) {
           const soapError =
-            soapMessages[0]?.message ||
+            soapMessages?.message ||
             "SOAP Error";
 
           await db.query(
@@ -766,7 +723,7 @@ exports.generateOrder = async (user, requestIds) => {
         }
 
         // ============================================
-        // EXTRACT ORDER NUMBER
+        // EXTRACT SOH NUMBER
         // ============================================
 
         const match =
@@ -845,7 +802,6 @@ exports.generateOrder = async (user, requestIds) => {
     throw error;
   }
 };
-
 
 
 
