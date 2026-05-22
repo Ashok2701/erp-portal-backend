@@ -796,7 +796,7 @@ const customerCode = await this.resolveCustomerCode(req);
    const pool = await sql.connect(config);
   
   let query = `
-    select PRODUCT,PROD_DESC, SITE, PHYSICAL_QTY, ALLOCATED_QTY,AVAILABLE_QTY,UNIT,LOCATION,CATEGORY  from LEWISB.XSTDALN_STOCK WHERE 1=1
+    select PRODUCT,PROD_DESC, SITE, PHYSICAL_QTY, ALLOCATED_QTY,AVAILABLE_QTY,UNIT,LOCATION,CATEGORY  from LEWISB.XSTDALN_STOCK WHERE SITE = '00102'
     `;
 
    
