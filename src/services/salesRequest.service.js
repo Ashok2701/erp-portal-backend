@@ -478,51 +478,41 @@ ${product}
         // SOAP ERRORS
         // ============================================
 
-        const soapMessages =
-          response?.runReturn?.messages;
+        // ============================================
+        // EXTRACT RESPONSE GROUP
+        // ============================================
 
-        if (soapMessages) {
-          const soapError =
-            soapMessages?.message ||
-            "SOAP Error";
+        const resultData =
+          response?.runReturn?.resultXml?.$value?.RESULT;
 
-          await db.query(
-            `
-            UPDATE sales_requests
-            SET status = 'DRAFT'
-            WHERE drop_request_id = $1
-            `,
-            [dropRequestId]
-          );
+        const responseGroups = resultData?.GRP || [];
 
-          results.push({
-            drop_request_id: dropRequestId,
-            success: false,
-            error: soapError,
+        // FIND GRP3
+        const grp3 = responseGroups.find(
+          (g) => g.attributes?.ID === "GRP3"
+        );
+
+        // CONVERT FLDS
+        let grp3Fields = {};
+
+        if (grp3?.FLD?.length > 0) {
+          grp3.FLD.forEach((f) => {
+            grp3Fields[f.attributes.NAME] =
+              f.$value || "";
           });
-
-          continue;
         }
 
-        // ============================================
-        // EXTRACT ORDER NUMBER
-        // ============================================
-
-        const match =
-          responseXml.match(
-            /NAME="SOHNUM"[^>]*>([^<]+)</
-          ) ||
-          responseXml.match(
-            /NAME="XSOHNUM"[^>]*>([^<]+)</
-          );
-
-        const erpOrderNo = match?.[1]?.trim();
+        // RESPONSE VALUES
+        const statusFlag = grp3Fields.O_XSFLG;
+        const statusMessage = grp3Fields.O_XSMESS;
+        const erpOrderNo = grp3Fields.O_XSOHNUM;
 
         // ============================================
         // SUCCESS
         // ============================================
 
-        if (erpOrderNo) {
+        if (statusFlag === "2" && erpOrderNo) {
+
           await db.query(
             `
             UPDATE sales_requests
@@ -537,9 +527,11 @@ ${product}
             drop_request_id: dropRequestId,
             success: true,
             erp_order_no: erpOrderNo,
-            status: "ORDER GENERATED",
+            message: statusMessage,
           });
+
         } else {
+
           await db.query(
             `
             UPDATE sales_requests
@@ -552,10 +544,11 @@ ${product}
           results.push({
             drop_request_id: dropRequestId,
             success: false,
-            error: "SOHNUM not returned from Sage X3",
+            error: statusMessage || "Order creation failed",
           });
         }
-      } catch (err) {
+      }
+      catch (err) {
         await clientDb.query("ROLLBACK");
 
         console.error("ORDER ERROR:", err);
@@ -569,7 +562,6 @@ ${product}
         clientDb.release();
       }
     }
-
     return {
       processed: results.length,
       results,
