@@ -211,10 +211,6 @@ exports.remove = async (dropRequestId) => {
   );
 };
 
-const soap = require("soap");
-const https = require("https");
-const db = require("../config/db");
-
 exports.generateOrder = async (user, requestIds) => {
   try {
     if (!requestIds || requestIds.length === 0) {
