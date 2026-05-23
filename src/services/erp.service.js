@@ -37,6 +37,9 @@ exports.getProducts = async (filters) => {
 
    const adapter = ERPFactory.getERPAdapter(filters);
 
+  return   adapter.getProducts(filters)
+
+/*
   // Parallel loading
       const [
         products,
@@ -94,6 +97,7 @@ exports.getProducts = async (filters) => {
         });
 
       return finalProducts;
+      */
 };
 
 exports.getProductCategories = async () => {
