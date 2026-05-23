@@ -949,6 +949,19 @@ const customerCode = await this.resolveCustomerCode(req);
 
     const sql = require("mssql");
 
+     const config = {
+         user: process.env.ERP_DB_USER,
+         password: process.env.ERP_DB_PASSWORD,
+         server: process.env.ERP_DB_HOST,
+         database: process.env.ERP_DB_NAME,
+         port: parseInt(process.env.ERP_DB_PORT),
+          options: {
+        encrypt: false, // or true depending on your setup
+        trustServerCertificate: true,
+      },
+       };
+
+
     const pool =
       await sql.connect(config);
 
@@ -982,6 +995,19 @@ const customerCode = await this.resolveCustomerCode(req);
   async getPricingRules(filters = {}) {
 
     const sql = require("mssql");
+
+ const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
 
     const pool =
       await sql.connect(config);
