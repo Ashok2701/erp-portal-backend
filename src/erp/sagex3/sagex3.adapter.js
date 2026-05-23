@@ -103,6 +103,7 @@ async getProducts(filters = {}) {
       ON I.ITMREF_0 = C.IDENT1_0
 
       AND C.CODBLB_0 = 'ITM'
+
   `;
 
   const request =
