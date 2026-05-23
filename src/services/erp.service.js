@@ -32,73 +32,66 @@ exports.getSuppliers = async () => {
    return adapter.getSuppliers();
 };
 
-exports.getProducts = async (filters) => {
-  //const connection = await getERPConnection(tenantId);
 
-   const adapter = ERPFactory.getERPAdapter(filters);
+exports.getProducts =
+  async (filters) => {
 
-  return   adapter.getProducts(filters)
+    const adapter =
+      ERPFactory.getERPAdapter(filters);
 
-/*
-  // Parallel loading
-      const [
-        products,
-        stocks,
-        pricingRules
-      ] = await Promise.all([
+    // -----------------------------
+    // LOAD DATA
+    // -----------------------------
 
-        adapter.getProducts(filters),
+    const [
+      products,
+      pricing
+    ] = await Promise.all([
 
-        adapter.getStocks(filters),
+      adapter.getProducts(filters),
 
-        adapter.getPricingRules(filters)
-      ]);
+      adapter.getPriceLists(filters)
+    ]);
 
-      // Build stock map
-      const stockMap = {};
+    // -----------------------------
+    // FINAL PRODUCTS
+    // -----------------------------
 
-      for (const stock of stocks) {
+    return products.map(product => {
 
-        stockMap[
-          stock.ITMREF_0
-        ] = stock.QTY;
-      }
+      const price =
+        pricingEngine.resolvePrice({
 
-      // Apply pricing
-      const finalProducts =
-        products.map(product => {
+          product,
 
-          const pricing =
-            pricingEngine.resolvePrice({
+          customer:
+            filters.customer,
 
-              product,
+          quantity:
+            filters.quantity || 1,
 
-              customer:
-                filters.customer,
-
-              pricingRules
-            });
-
-          return {
-
-            ...product,
-
-            STOCK:
-              stockMap[
-                product.PROD_CODE
-              ] || 0,
-
-            PRICE:
-              pricing.price,
-
-            PRICE_SOURCE:
-              pricing.source
-          };
+          pricing
         });
 
-      return finalProducts;
-      */
+      return {
+
+        ...product,
+
+        BASE_PRICE:
+          price.basePrice,
+
+        DISCOUNT:
+          price.discount,
+
+        FINAL_PRICE:
+          price.finalPrice,
+
+        PRICE_SOURCE:
+          price.source
+      };
+    });
 };
+
 
 exports.getProductCategories = async () => {
 //  const connection = await getERPConnection(tenantId);

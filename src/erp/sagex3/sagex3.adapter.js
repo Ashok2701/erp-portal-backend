@@ -60,8 +60,75 @@ async resolveCustomerCode(req) {
   return this.getStockFromDb(filters);
 }
 
+async getProducts(filters = {}) {
 
- async getProducts(filters = {}) {
+  const sql = require("mssql");
+
+  const config = {
+    user: process.env.ERP_DB_USER,
+    password: process.env.ERP_DB_PASSWORD,
+    server: process.env.ERP_DB_HOST,
+    database: process.env.ERP_DB_NAME,
+    port: parseInt(process.env.ERP_DB_PORT),
+
+    options: {
+      encrypt: false,
+      trustServerCertificate: true,
+    },
+  };
+
+  const pool =
+    await sql.connect(config);
+
+  let query = `
+
+    SELECT
+
+      I.ITMREF_0 AS PROD_CODE,
+
+      I.TCLCOD_0 AS CATEGORY,
+
+      I.ITMDES1_0 AS PROD_DESC,
+
+      C.BLOB_0 AS PROD_IMG,
+
+      I.STU_0 AS UOM,
+
+      10 AS BASE_PRICE
+
+    FROM LEWISB.ITMMASTER I
+
+    LEFT JOIN LEWISB.CBLOB C
+
+      ON I.ITMREF_0 = C.IDENT1_0
+
+      AND C.CODBLB_0 = 'ITM'
+  `;
+
+  const request =
+    pool.request();
+
+  if (filters.category) {
+
+    query += `
+      WHERE I.TCLCOD_0 = @category
+    `;
+
+    request.input(
+      "category",
+      sql.VarChar,
+      filters.category
+    );
+  }
+
+  const result =
+    await request.query(query);
+
+  return result.recordset;
+}
+
+
+ async getProducts_1(filters = {}) {
     
   const sql = require("mssql");
 
@@ -943,108 +1010,55 @@ const customerCode = await this.resolveCustomerCode(req);
   }
 
 
+async getPriceLists(filters = {}) {
 
-  //  get stocks
-  async getStocks(filters = {}) {
+  const sql = require("mssql");
 
-    const sql = require("mssql");
+  const pool =
+    await sql.connect(config);
 
-     const config = {
-         user: process.env.ERP_DB_USER,
-         password: process.env.ERP_DB_PASSWORD,
-         server: process.env.ERP_DB_HOST,
-         database: process.env.ERP_DB_NAME,
-         port: parseInt(process.env.ERP_DB_PORT),
-          options: {
-        encrypt: false, // or true depending on your setup
-        trustServerCertificate: true,
-      },
-       };
+  const query = `
 
+    SELECT
 
-    const pool =
-      await sql.connect(config);
+      PLI_0,
 
-    const query = `
+      PLICRI_0,
 
-      SELECT
-        ITMREF_0,
-        PHYALL_0 AS QTY
+      PLICRI1_0,
 
-      FROM LEWISB.ITMFACILIT
+      PRI_0,
 
-      WHERE STOFCY_0 = @site
-    `;
+      DCGVAL_0,
 
-    const request =
-      pool.request();
+      MINQTY_0,
 
-    request.input(
-      "site",
-      sql.VarChar,
-      filters.site
-    );
+      MAXQTY_0,
 
-    const result =
-      await request.query(query);
+      PLISTRDAT_0,
 
-    return result.recordset;
-  }
+      PLIENDDAT_0
 
+    FROM LEWISB.SPRICLIST
 
-  async getPricingRules(filters = {}) {
+    WHERE
 
-    const sql = require("mssql");
+      GETDATE()
 
- const config = {
-     user: process.env.ERP_DB_USER,
-     password: process.env.ERP_DB_PASSWORD,
-     server: process.env.ERP_DB_HOST,
-     database: process.env.ERP_DB_NAME,
-     port: parseInt(process.env.ERP_DB_PORT),
-      options: {
-    encrypt: false, // or true depending on your setup
-    trustServerCertificate: true,
-  },
-   };
+      BETWEEN
 
+      PLISTRDAT_0
 
-    const pool =
-      await sql.connect(config);
+      AND
 
-    const query = `
+      PLIENDDAT_0
+  `;
 
-      SELECT
+  const result =
+    await pool.request().query(query);
 
-        BPCNUM_0,
-        ITMREF_0,
-        TCLCOD_0,
-
-        PRI_0
-
-      FROM LEWISB.PLISTLIN
-
-      WHERE
-      (
-        BPCNUM_0 = @customer
-        OR BPCNUM_0 IS NULL
-      )
-    `;
-
-    const request =
-      pool.request();
-
-    request.input(
-      "customer",
-      sql.VarChar,
-      filters.customer || null
-    );
-
-    const result =
-      await request.query(query);
-
-    return result.recordset;
-  }
+  return result.recordset;
+}
 
 }
 
