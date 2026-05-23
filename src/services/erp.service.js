@@ -1,4 +1,5 @@
 const ERPFactory = require("../erp/erp.factory");
+const pricingEngine = require("../utils/pricing.engine");
 
 exports.createSalesOrder = async (salesRequest) => {
   // 🔴 DEMO / MOCK IMPLEMENTATION
@@ -15,7 +16,6 @@ exports.createSalesOrder = async (salesRequest) => {
   // To simulate failure, return:
   // return { success: false, error: "ERP timeout" };
 };
-
 
 
 exports.getCustomers = async () => {
@@ -37,7 +37,63 @@ exports.getProducts = async (filters) => {
 
    const adapter = ERPFactory.getERPAdapter(filters);
 
-  return adapter.getProducts();
+  // Parallel loading
+      const [
+        products,
+        stocks,
+        pricingRules
+      ] = await Promise.all([
+
+        adapter.getProducts(filters),
+
+        adapter.getStocks(filters),
+
+        adapter.getPricingRules(filters)
+      ]);
+
+      // Build stock map
+      const stockMap = {};
+
+      for (const stock of stocks) {
+
+        stockMap[
+          stock.ITMREF_0
+        ] = stock.QTY;
+      }
+
+      // Apply pricing
+      const finalProducts =
+        products.map(product => {
+
+          const pricing =
+            pricingEngine.resolvePrice({
+
+              product,
+
+              customer:
+                filters.customer,
+
+              pricingRules
+            });
+
+          return {
+
+            ...product,
+
+            STOCK:
+              stockMap[
+                product.PROD_CODE
+              ] || 0,
+
+            PRICE:
+              pricing.price,
+
+            PRICE_SOURCE:
+              pricing.source
+          };
+        });
+
+      return finalProducts;
 };
 
 exports.getProductCategories = async () => {

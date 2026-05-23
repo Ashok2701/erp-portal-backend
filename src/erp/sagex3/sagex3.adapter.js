@@ -942,6 +942,84 @@ const customerCode = await this.resolveCustomerCode(req);
 
   }
 
+
+
+  //  get stocks
+  async getStocks(filters = {}) {
+
+    const sql = require("mssql");
+
+    const pool =
+      await sql.connect(config);
+
+    const query = `
+
+      SELECT
+        ITMREF_0,
+        PHYALL_0 AS QTY
+
+      FROM LEWISB.ITMFACILIT
+
+      WHERE STOFCY_0 = @site
+    `;
+
+    const request =
+      pool.request();
+
+    request.input(
+      "site",
+      sql.VarChar,
+      filters.site
+    );
+
+    const result =
+      await request.query(query);
+
+    return result.recordset;
+  }
+
+
+  async getPricingRules(filters = {}) {
+
+    const sql = require("mssql");
+
+    const pool =
+      await sql.connect(config);
+
+    const query = `
+
+      SELECT
+
+        BPCNUM_0,
+        ITMREF_0,
+        TCLCOD_0,
+
+        PRI_0
+
+      FROM LEWISB.PLISTLIN
+
+      WHERE
+      (
+        BPCNUM_0 = @customer
+        OR BPCNUM_0 IS NULL
+      )
+    `;
+
+    const request =
+      pool.request();
+
+    request.input(
+      "customer",
+      sql.VarChar,
+      filters.customer || null
+    );
+
+    const result =
+      await request.query(query);
+
+    return result.recordset;
+  }
+
 }
 
 module.exports = SageX3Adapter;
