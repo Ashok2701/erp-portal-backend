@@ -14,5 +14,5 @@ router.get("/product-categories", auth, ctrl.getProductCategories);
  router.get("/suppliers/:supplierCode/addresses", auth, ctrl.getSupplierAddresses);
 
  router.get("/stock", auth, ctrl.getStock);
-
+ router.get("/sites", auth, ctrl.getAllSites);
 module.exports = router;

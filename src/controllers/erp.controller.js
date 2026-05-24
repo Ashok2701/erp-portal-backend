@@ -96,3 +96,16 @@ exports.getStock = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+exports.getAllSites = async (req, res) => {
+  try {
+    const filters = req.query;
+
+    const data = await erpService.getAllSites(filters);
+
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("getAllSites error:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

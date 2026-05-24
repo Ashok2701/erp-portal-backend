@@ -1073,6 +1073,32 @@ async getPriceLists(filters = {}) {
   return result.recordset;
 }
 
+
+  async getAllSites() {
+
+    const sql = require("mssql");
+
+   const config = {
+     user: process.env.ERP_DB_USER,
+     password: process.env.ERP_DB_PASSWORD,
+     server: process.env.ERP_DB_HOST,
+     database: process.env.ERP_DB_NAME,
+     port: parseInt(process.env.ERP_DB_PORT),
+      options: {
+    encrypt: false, // or true depending on your setup
+    trustServerCertificate: true,
+  },
+   };
+
+   const pool = await sql.connect(config);
+
+   const result = await pool.request().query(`
+      SELECT FCY_0 AS SITE,FCYNAM_0 AS DESCR FROM LEWISB.FACILITY
+      WHERE XTMSFCY_0 = 2
+   `);
+   return result.recordset;
+  }
+
 }
 
 module.exports = SageX3Adapter;

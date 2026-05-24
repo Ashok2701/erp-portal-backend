@@ -119,3 +119,10 @@ exports.getStock = async (filters) => {
   const adapter = ERPFactory.getERPAdapter();
   return adapter.getStock(filters);
 };
+
+// SITES
+
+exports.getAllSites = async () => {
+  const adapter = ERPFactory.getERPAdapter();
+  return adapter.getAllSites();
+};
