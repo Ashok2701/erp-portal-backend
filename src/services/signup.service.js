@@ -154,7 +154,7 @@ exports.sendForVerification = async (admin, userId, body) => {
        status = 'IN_VERIFICATION',
        erp_entity_type = COALESCE($1, erp_entity_type),
        erp_entity_code = COALESCE($2, erp_entity_code),
-       allocatedSite = COALESCE($4, allowedSite)
+       allowedSite = COALESCE($4, allowedSite)
      WHERE user_id = $3`,
     [erp_entity_type || null, erp_entity_code || null, userId, allowedSite || '']
   );
