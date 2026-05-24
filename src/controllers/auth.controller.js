@@ -97,6 +97,7 @@ res.json({token,  user: {
                      erp_customer_code: erpContext.erp_customer_code,
                      erp_supplier_code: erpContext.erp_supplier_code,
                      status: user.status || "ACTIVE",
+                     allowedsite : user.allowedsite,
                      roles
 
                    }
