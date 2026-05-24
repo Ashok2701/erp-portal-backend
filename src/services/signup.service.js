@@ -146,7 +146,7 @@ exports.getUserDetail = async (userId) => {
 // ==================== ADMIN: SEND FOR VERIFICATION ====================
 
 exports.sendForVerification = async (admin, userId, body) => {
-  const { erp_entity_type, erp_entity_code, role_id, allowedSites } = body;
+  const { erp_entity_type, erp_entity_code, role_id, allowedSite } = body;
 
   // Update user with ERP code and status
   await db.query(
@@ -154,9 +154,9 @@ exports.sendForVerification = async (admin, userId, body) => {
        status = 'IN_VERIFICATION',
        erp_entity_type = COALESCE($1, erp_entity_type),
        erp_entity_code = COALESCE($2, erp_entity_code),
-       allocatedSite = COALESCE($4, allowedSites)
+       allocatedSite = COALESCE($4, allowedSite)
      WHERE user_id = $3`,
-    [erp_entity_type || null, erp_entity_code || null, userId, allowedSites || '']
+    [erp_entity_type || null, erp_entity_code || null, userId, allowedSite || '']
   );
 
   // Assign role if provided
