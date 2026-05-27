@@ -1,114 +1,227 @@
+// src/engines/pricing.engine.js
+
+// ======================================================
+// BUILD PRICING INDEX
+// ======================================================
+
+exports.buildPricingIndex = (pricingRows) => {
+
+  const index = {
+
+    // -----------------------------------
+    // Customer + Product Price
+    // key:
+    // CUSTOMER_PRODUCT
+    // -----------------------------------
+
+    T20: {},
+
+    // -----------------------------------
+    // Customer + Product Discount
+    // key:
+    // CUSTOMER_PRODUCT
+    // -----------------------------------
+
+    T21: {},
+
+    // -----------------------------------
+    // Product Base Price
+    // key:
+    // PRODUCT
+    // -----------------------------------
+
+    T10: {},
+
+    // -----------------------------------
+    // Quantity Pricing
+    // key:
+    // PRODUCT
+    // value:
+    // array of qty rules
+    // -----------------------------------
+
+    T11: {}
+  };
+
+  pricingRows.forEach(row => {
+
+    // ===================================
+    // T20
+    // Customer + Product Price
+    // ===================================
+
+    if (row.PLI_0 === "T20") {
+
+      const key =
+        `${row.PLICRI_0}_${row.PLICRI1_0}`;
+
+      index.T20[key] = row;
+    }
+
+    // ===================================
+    // T21
+    // Customer + Product Discount
+    // ===================================
+
+    else if (row.PLI_0 === "T21") {
+
+      const key =
+        `${row.PLICRI_0}_${row.PLICRI1_0}`;
+
+      index.T21[key] = row;
+    }
+
+    // ===================================
+    // T10
+    // Product Price
+    // ===================================
+
+    else if (row.PLI_0 === "T10") {
+
+      index.T10[
+        row.PLICRI_0
+      ] = row;
+    }
+
+    // ===================================
+    // T11
+    // Quantity Pricing
+    // ===================================
+
+    else if (row.PLI_0 === "T11") {
+
+      const product =
+        row.PLICRI_0;
+
+      if (!index.T11[product]) {
+
+        index.T11[product] = [];
+      }
+
+      index.T11[product].push(row);
+    }
+  });
+
+  return index;
+};
+
+
+// ======================================================
+// FIND BASE PRICE
+// ======================================================
+
 function findBasePrice({
+
   product,
+
   customer,
+
   quantity,
-  pricing
+
+  pricingIndex
+
 }) {
 
-  // ---------------------------------
-  // T20 Customer + Product
-  // ---------------------------------
+  // ===================================
+  // T20
+  // Customer + Product
+  // ===================================
+
+  const customerKey =
+    `${customer}_${product.PROD_CODE}`;
 
   let rule =
-    pricing.find(p =>
-
-      p.PLI_0 === "T20"
-
-      &&
-
-      p.PLICRI_0 === customer
-
-      &&
-
-      p.PLICRI1_0 ===
-        product.PROD_CODE
-    );
+    pricingIndex.T20[
+      customerKey
+    ];
 
   if (rule) {
 
     return {
 
-      price: rule.PRI_0,
+      price:
+        Number(rule.PRI_0 || 0),
 
-      source: "T20"
+      source:
+        "T20"
     };
   }
 
-  // ---------------------------------
-  // T11 Qty Pricing
-  // ---------------------------------
+  // ===================================
+  // T11
+  // Quantity Pricing
+  // ===================================
+
+  const qtyRules =
+    pricingIndex.T11[
+      product.PROD_CODE
+    ] || [];
 
   rule =
-    pricing.find(p =>
-
-      p.PLI_0 === "T11"
-
-      &&
-
-      p.PLICRI_0 ===
-        product.PROD_CODE
-
-      &&
+    qtyRules.find(r =>
 
       quantity >=
-        p.MINQTY_0
+        Number(r.MINQTY_0 || 0)
 
       &&
 
       quantity <=
-        p.MAXQTY_0
+        Number(r.MAXQTY_0 || 999999)
     );
 
   if (rule) {
 
     return {
 
-      price: rule.PRI_0,
+      price:
+        Number(rule.PRI_0 || 0),
 
-      source: "T11"
+      source:
+        "T11"
     };
   }
 
-  // ---------------------------------
-  // T10 Product Price
-  // ---------------------------------
+  // ===================================
+  // T10
+  // Product Price
+  // ===================================
 
   rule =
-    pricing.find(p =>
-
-      p.PLI_0 === "T10"
-
-      &&
-
-      p.PLICRI_0 ===
-        product.PROD_CODE
-    );
+    pricingIndex.T10[
+      product.PROD_CODE
+    ];
 
   if (rule) {
 
     return {
 
-      price: rule.PRI_0,
+      price:
+        Number(rule.PRI_0 || 0),
 
-      source: "T10"
+      source:
+        "T10"
     };
   }
 
-  // ---------------------------------
+  // ===================================
   // Product Master Price
-  // ---------------------------------
+  // ===================================
 
   if (product.BASE_PRICE) {
 
     return {
 
       price:
-        product.BASE_PRICE,
+        Number(product.BASE_PRICE || 0),
 
       source:
         "PRODUCT_MASTER"
     };
   }
+
+  // ===================================
+  // No Price Found
+  // ===================================
 
   return {
 
@@ -119,43 +232,46 @@ function findBasePrice({
 }
 
 
+// ======================================================
+// APPLY DISCOUNTS
+// ======================================================
+
 function applyDiscounts({
+
   basePrice,
+
   product,
+
   customer,
-  pricing
+
+  pricingIndex
+
 }) {
 
   let discount = 0;
 
-  // ---------------------------------
-  // T21 Discount
-  // ---------------------------------
+  // ===================================
+  // T21
+  // Customer + Product Discount
+  // ===================================
+
+  const discountKey =
+    `${customer}_${product.PROD_CODE}`;
 
   const t21 =
-    pricing.find(p =>
-
-      p.PLI_0 === "T21"
-
-      &&
-
-      p.PLICRI_0 === customer
-
-      &&
-
-      p.PLICRI1_0 ===
-        product.PROD_CODE
-    );
+    pricingIndex.T21[
+      discountKey
+    ];
 
   if (t21) {
 
     discount +=
-      t21.DCGVAL_0 || 0;
+      Number(t21.DCGVAL_0 || 0);
   }
 
-  // ---------------------------------
+  // ===================================
   // Final Price
-  // ---------------------------------
+  // ===================================
 
   const finalPrice =
 
@@ -175,12 +291,25 @@ function applyDiscounts({
 }
 
 
+// ======================================================
+// MAIN RESOLVER
+// ======================================================
+
 exports.resolvePrice = ({
+
   product,
+
   customer,
-  quantity,
-  pricing
+
+  quantity = 1,
+
+  pricingIndex
+
 }) => {
+
+  // ===================================
+  // Base Price
+  // ===================================
 
   const base =
     findBasePrice({
@@ -191,8 +320,12 @@ exports.resolvePrice = ({
 
       quantity,
 
-      pricing
+      pricingIndex
     });
+
+  // ===================================
+  // Discounts
+  // ===================================
 
   const discountResult =
     applyDiscounts({
@@ -204,8 +337,12 @@ exports.resolvePrice = ({
 
       customer,
 
-      pricing
+      pricingIndex
     });
+
+  // ===================================
+  // Final Result
+  // ===================================
 
   return {
 

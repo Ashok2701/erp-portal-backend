@@ -60,7 +60,115 @@ async resolveCustomerCode(req) {
   return this.getStockFromDb(filters);
 }
 
+
 async getProducts(filters = {}) {
+
+  const sql = require("mssql");
+
+  const config = {
+    user: process.env.ERP_DB_USER,
+    password: process.env.ERP_DB_PASSWORD,
+    server: process.env.ERP_DB_HOST,
+    database: process.env.ERP_DB_NAME,
+    port: parseInt(process.env.ERP_DB_PORT),
+
+    options: {
+      encrypt: false,
+      trustServerCertificate: true,
+    },
+  };
+
+  const pool =
+    await sql.connect(config);
+
+  const request =
+    pool.request();
+
+  let query = `
+
+    SELECT DISTINCT
+
+      I.ITMREF_0 AS PROD_CODE,
+
+      I.TCLCOD_0 AS CATEGORY,
+
+      I.ITMDES1_0 AS PROD_DESC,
+
+      C.BLOB_0 AS PROD_IMG,
+
+      I.STU_0 AS UOM,
+
+      F.STOFCY_0 AS SITE,
+
+      10 AS BASE_PRICE
+
+    FROM LEWISB.ITMMASTER I
+
+    LEFT JOIN LEWISB.CBLOB C
+
+      ON I.ITMREF_0 = C.IDENT1_0
+
+      AND C.CODBLB_0 = 'ITM'
+
+    INNER JOIN LEWISB.ITMFACILIT F
+
+      ON I.ITMREF_0 = F.ITMREF_0
+
+    WHERE 1=1
+  `;
+
+  // -----------------------------------
+  // CATEGORY
+  // -----------------------------------
+
+  if (filters.category) {
+
+    query += `
+      AND I.TCLCOD_0 = @category
+    `;
+
+    request.input(
+      "category",
+      sql.VarChar,
+      filters.category
+    );
+  }
+
+  // -----------------------------------
+  // MULTIPLE SITES
+  // -----------------------------------
+
+  if (filters.sites?.length) {
+
+    const siteParams = [];
+
+    filters.sites.forEach((site, index) => {
+
+      const param = `site${index}`;
+
+      siteParams.push(`@${param}`);
+
+      request.input(
+        param,
+        sql.VarChar,
+        site
+      );
+    });
+
+    query += `
+      AND F.STOFCY_0 IN (${siteParams.join(",")})
+    `;
+  }
+
+  const result =
+    await request.query(query);
+
+  return result.recordset;
+}
+
+
+
+async getProducts_2(filters = {}) {
 
   const sql = require("mssql");
 
@@ -1011,7 +1119,111 @@ const customerCode = await this.resolveCustomerCode(req);
   }
 
 
-async getPriceLists(filters = {}) {
+  async getPriceLists(filters = {}) {
+
+    const sql = require("mssql");
+
+    const config = {
+      user: process.env.ERP_DB_USER,
+      password: process.env.ERP_DB_PASSWORD,
+      server: process.env.ERP_DB_HOST,
+      database: process.env.ERP_DB_NAME,
+      port: parseInt(process.env.ERP_DB_PORT),
+
+      options: {
+        encrypt: false,
+        trustServerCertificate: true,
+      },
+    };
+
+    const pool =
+      await sql.connect(config);
+
+    const request =
+      pool.request();
+
+    let query = `
+
+      SELECT
+
+        PLI_0,
+
+        PLICRI_0,
+
+        PLICRI1_0,
+
+        PRI_0,
+
+        DCGVAL_0,
+
+        MINQTY_0,
+
+        MAXQTY_0,
+
+        PLISTRDAT_0,
+
+        PLIENDDAT_0
+
+      FROM LEWISB.SPRICLIST
+
+      WHERE
+
+        GETDATE()
+
+        BETWEEN
+
+        PLISTRDAT_0
+
+        AND
+
+        PLIENDDAT_0
+
+      AND
+
+        PLI_0 IN (
+          'T10',
+          'T11',
+          'T20',
+          'T21'
+        )
+    `;
+
+    // --------------------------------
+    // CUSTOMER FILTER
+    // --------------------------------
+
+    if (filters.customer) {
+
+      query += `
+
+        AND (
+
+          PLICRI_0 = @customer
+
+          OR
+
+          PLI_0 IN (
+            'T10',
+            'T11'
+          )
+        )
+      `;
+
+      request.input(
+        "customer",
+        sql.VarChar,
+        filters.customer
+      );
+    }
+
+    const result =
+      await request.query(query);
+
+    return result.recordset;
+  }
+
+
+async getPriceLists_1(filters = {}) {
 
   const sql = require("mssql");
 

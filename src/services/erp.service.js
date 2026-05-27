@@ -45,13 +45,18 @@ exports.getProducts =
 
     const [
       products,
-      pricing
+      pricingRows
     ] = await Promise.all([
 
       adapter.getProducts(filters),
 
       adapter.getPriceLists(filters)
     ]);
+
+    const pricingIndex =
+      pricingEngine.buildPricingIndex(
+        pricingRows
+      );
 
     // -----------------------------
     // FINAL PRODUCTS
@@ -70,7 +75,7 @@ exports.getProducts =
           quantity:
             filters.quantity || 1,
 
-          pricing
+          pricingIndex
         });
 
       return {

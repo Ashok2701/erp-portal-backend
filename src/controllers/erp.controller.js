@@ -33,7 +33,26 @@ exports.getProducts = async (req, res) => {
   try {
    // const tenantId = req.user.tenantId;
 
-    const filters = req.query;
+   // const filters = req.query;
+
+   const filters = {
+
+     customer:
+       req.query.customer || null,
+
+     sites:
+       req.query.sites
+         ? req.query.sites
+             .split(",")
+             .map(s => s.trim())
+         : [],
+
+     category:
+       req.query.category || null,
+
+     quantity:
+       Number(req.query.quantity || 1)
+   };
 
     const data = await erpService.getProducts(filters);
 
