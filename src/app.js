@@ -3,6 +3,7 @@ const cors = require("cors");
 const cartRoutes = require("./routes/cart.routes");
 const authRoutes = require("./routes/auth.routes");
 const adminRoutes = require("./routes/admin.routes");
+const profileRoutes = require("./routes/profile.routes");
 const salesRequestRoutes = require("./routes/salesRequest.routes");
 const roleModuleRoutes = require("./routes/roleModule.routes");
 const chatRoutes = require("./routes/chat.routes");
@@ -21,6 +22,7 @@ app.use(express.json());
 
 app.use("/auth", authRoutes); 
 app.use("/admin", adminRoutes);
+app.use("/profile", profileRoutes);
 app.use("/sales-requests", salesRequestRoutes);
 app.use("/modules", require("./routes/module.routes"));
 app.use("/roles", require("./routes/role.routes"));
