@@ -187,19 +187,19 @@ exports.getCustomerDashboard = async ({
 const recentOrdersResult = await db.query(
   `
   SELECT
-      sr.request_no,
+      sr.drop_request_id as request_no,
       DATE(sr.request_date) AS date,
 
       (
           SELECT COUNT(*)
           FROM sales_request_items sri
-          WHERE sri.request_id = sr.id
+          WHERE sri.drop_request_id = sr.id
       ) AS products_count,
 
       sr.status,
-      sr.erp_order_no,
-      sr.request_date,
-      sr.total_amount
+      sr.erp_order_no as so_number,
+      sr.request_date as delivery_date,
+      sr.total_amount as amount
 
   FROM sales_requests sr
 
