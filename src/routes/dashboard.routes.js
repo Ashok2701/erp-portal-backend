@@ -8,7 +8,7 @@ router.get("/admin/stats", auth, ctrl.getAdminStats);
 // CUSTOMER DASHBOARD
 router.get(
   "/customer",
-  authMiddleware,
+  auth,
   ctrl.getCustomerDashboard
 );
 
