@@ -23,3 +23,53 @@ exports.getContentById = async (user, username) => {
 
   return result.rows[0];
 };
+
+// ======================================
+// UPDATE PROFILE
+// ======================================
+
+exports.updateProfile = async (
+  user,
+  username,
+  payload
+) => {
+
+  const {
+    full_name,
+    email,
+    contact_number,
+    whatsapp_number
+  } = payload;
+
+  const result = await db.query(
+    `
+    UPDATE users
+    SET
+      full_name = $1,
+      email = $2,
+      contact_number = $3,
+      whatsapp_number = $4,
+      updated_at = NOW()
+    WHERE username = $5
+    RETURNING
+      username,
+      full_name,
+      email,
+      contact_number,
+      whatsapp_number
+    `,
+    [
+      full_name,
+      email,
+      contact_number,
+      whatsapp_number,
+      username
+    ]
+  );
+
+  if (result.rows.length === 0) {
+    throw new Error("Profile not found");
+  }
+
+  return result.rows[0];
+};

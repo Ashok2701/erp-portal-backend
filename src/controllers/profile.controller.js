@@ -22,3 +22,35 @@ exports.getProfileDetails = async (req, res) => {
     });
   }
 };
+
+
+// ======================================
+// UPDATE PROFILE
+// ======================================
+
+exports.updateProfile = async (req, res) => {
+
+  try {
+
+    const data = await service.updateProfile(
+      req.user,
+      req.query.username,
+      req.body
+    );
+
+    res.json({
+      success: true,
+      message: "Profile updated successfully",
+      data
+    });
+
+  } catch (err) {
+
+    console.error("UPDATE PROFILE ERROR:", err);
+
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
+};
