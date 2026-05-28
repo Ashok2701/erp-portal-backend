@@ -202,14 +202,11 @@ const recentOrdersResult = await db.query(
       sr.total_amount as amount
 
   FROM sales_requests sr
-
   WHERE sr.user_id = $1
-
-  AND DATE(sr.request_date)
+  AND sr.request_date
   BETWEEN $2 AND $3
 
   ORDER BY sr.request_date DESC
-
   LIMIT 10
   `,
   [user.user_id, from, to]
