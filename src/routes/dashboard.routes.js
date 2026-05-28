@@ -5,4 +5,12 @@ const auth = require("../middleware/auth.middleware");
 
 router.get("/admin/stats", auth, ctrl.getAdminStats);
 
+// CUSTOMER DASHBOARD
+router.get(
+  "/customer",
+  authMiddleware,
+  ctrl.getCustomerDashboard
+);
+
+
 module.exports = router;

@@ -1,5 +1,11 @@
 const db = require("../config/db");
 const ERPFactory = require("../erp/erp.factory");
+const {
+  sql,
+  poolPromise
+} = require("../config/erp-db");
+
+
 
 exports.getAdminStats = async () => {
 
@@ -106,3 +112,105 @@ GROUP BY r.role_name
     }
   };
 };
+
+
+
+exports.getCustomerDashboard = async ({
+  username,
+  from,
+  to,
+  preset
+}) => {
+
+  // =========================================
+  // POSTGRESQL
+  // =========================================
+
+  const userResult = await db.query(
+    `
+    SELECT
+      username,
+      full_name,
+      allowedsite
+    FROM users
+    WHERE username = $1
+    `,
+    [username]
+  );
+
+  if (userResult.rows.length === 0) {
+    throw new Error("User not found");
+  }
+
+  const user = userResult.rows[0];
+
+  // =========================================
+  // SQL SERVER
+  // =========================================
+
+  const pool = await poolPromise;
+
+  const siteResult = await pool.request()
+    .input(
+      "site",
+      sql.VarChar,
+      user.allowedsite
+    )
+    .query(`
+      SELECT
+        XFCY_0,
+        FCYNAM_0,
+        CRY_0
+      FROM LEWISB.XTMSUSRFCY
+      WHERE XFCY_0 = @site
+    `);
+
+  const site =
+    siteResult.recordset[0];
+
+  // =========================================
+  // POSTGRES KPI QUERY
+  // =========================================
+
+  const kpiResult = await db.query(
+    `
+    SELECT COUNT(*) AS count
+    FROM sales_requests
+    WHERE customer_username = $1
+    AND created_at BETWEEN $2 AND $3
+    `,
+    [username, from, to]
+  );
+
+  // =========================================
+  // FINAL RESPONSE
+  // =========================================
+
+  return {
+
+    user: {
+      username: user.username,
+      display_name: user.full_name,
+      company_name: site?.FCYNAM_0 || ""
+    },
+
+    kpis: {
+      open_requests:
+        Number(kpiResult.rows[0].count),
+
+      sales_orders: 48,
+      orders_in_dispatch: 6,
+      delivered_orders: 32,
+      pending_payments_amount: 420000,
+      currency: "USD"
+    },
+
+    pipeline: [],
+    pending_actions: [],
+    notifications: [],
+    recent_orders: []
+  };
+};
+
+
+
