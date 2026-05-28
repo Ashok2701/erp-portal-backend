@@ -1,7 +1,7 @@
 const db = require("../config/db");
  const emailService = require("./email.service");
 
-exports.getContentById = async (user, contentId) => {
+exports.getContentById = async (user, username) => {
 
   const result = await db.query(
     `
@@ -12,9 +12,9 @@ exports.getContentById = async (user, contentId) => {
     u.allowedsite
     from  users u
     WHERE
-      u.username = $2
+      u.username = $1
     `,
-    [user.id, contentId]
+    [username]
   );
 
   if (result.rows.length === 0) {

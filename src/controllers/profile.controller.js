@@ -15,7 +15,7 @@ exports.getProfileDetails = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("GET CONTENT ERROR:", err);
+    console.error("GET PROFILE ERROR:", err);
     res.status(500).json({
       success: false,
       message: err.message
