@@ -193,7 +193,7 @@ const recentOrdersResult = await db.query(
       (
           SELECT COUNT(*)
           FROM sales_request_items sri
-          WHERE sri.drop_request_id = sr.id
+          WHERE sri.drop_request_id = sr.drop_request_id
       ) AS products_count,
 
       sr.status,
