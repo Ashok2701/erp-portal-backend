@@ -232,7 +232,7 @@ const recentOrdersResult = await db.query(
       open_requests:
         Number(kpiResult.rows[0].count),
 
-      sales_orders: 48,
+      sales_orders: 38,
       orders_in_dispatch: 6,
       delivered_orders: 32,
       pending_payments_amount: 4200,
@@ -241,8 +241,7 @@ const recentOrdersResult = await db.query(
 
     pipeline: [],
     pending_actions: [],
-    notifications: [],
-    recent_orders: []
+    notifications: []
   };
 };
 

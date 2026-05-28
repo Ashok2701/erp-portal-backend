@@ -39,6 +39,81 @@ exports.getProducts =
     const adapter =
       ERPFactory.getERPAdapter(filters);
 
+    console.time("TOTAL_PRODUCTS");
+
+    console.time("GET_PRODUCTS");
+
+    const products =
+      await adapter.getProducts(filters);
+
+    console.timeEnd("GET_PRODUCTS");
+
+    console.time("GET_PRICELISTS");
+
+    const pricingRows =
+      await adapter.getPriceLists(filters);
+
+    console.timeEnd("GET_PRICELISTS");
+
+    console.time("BUILD_INDEX");
+
+    const pricingIndex =
+      pricingEngine.buildPricingIndex(
+        pricingRows
+      );
+
+    console.timeEnd("BUILD_INDEX");
+
+    console.time("MAP_PRODUCTS");
+
+    const result =
+      products.map(product => {
+
+        const price =
+          pricingEngine.resolvePrice({
+
+            product,
+
+            customer:
+              filters.customer,
+
+            quantity:
+              filters.quantity || 1,
+
+            pricingIndex
+          });
+
+        return {
+
+          ...product,
+
+          BASE_PRICE:
+            price.basePrice,
+
+          DISCOUNT:
+            price.discount,
+
+          FINAL_PRICE:
+            price.finalPrice,
+
+          PRICE_SOURCE:
+            price.source
+        };
+      });
+
+    console.timeEnd("MAP_PRODUCTS");
+
+    console.timeEnd("TOTAL_PRODUCTS");
+
+    return result;
+};
+
+exports.getProducts_2 =
+  async (filters) => {
+
+    const adapter =
+      ERPFactory.getERPAdapter(filters);
+
     // -----------------------------
     // LOAD DATA
     // -----------------------------
