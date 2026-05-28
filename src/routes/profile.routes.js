@@ -4,7 +4,7 @@ const ProfileController = require("../controllers/profile.controller");
 const authMiddleware = require("../middleware/auth.middleware");
 
 
-router.get("/:username", authMiddleware, ProfileController.getProfileDetails);
+router.get("/", authMiddleware, ProfileController.getProfileDetails);
 
 
 
