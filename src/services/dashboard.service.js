@@ -131,7 +131,7 @@ exports.getCustomerDashboard = async ({
     SELECT
       username,
       full_name,
-      allowedsite
+      allowedsite,user_id, erp_entity_code
     FROM users
     WHERE username = $1
     `,
@@ -176,10 +176,10 @@ exports.getCustomerDashboard = async ({
     `
     SELECT COUNT(*) AS count
     FROM sales_requests
-    WHERE customer_username = $1
-    AND created_at BETWEEN $2 AND $3
+    WHERE user_id = $1
+    AND request_date BETWEEN $2 AND $3
     `,
-    [username, from, to]
+    [user.user_id, from, to]
   );
 
   // =========================================
