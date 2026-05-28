@@ -182,6 +182,40 @@ exports.getCustomerDashboard = async ({
     [user.user_id, from, to]
   );
 
+
+ // table format data
+const recentOrdersResult = await db.query(
+  `
+  SELECT
+      sr.request_no,
+      DATE(sr.request_date) AS date,
+
+      (
+          SELECT COUNT(*)
+          FROM sales_request_items sri
+          WHERE sri.request_id = sr.id
+      ) AS products_count,
+
+      sr.status,
+      sr.erp_order_no,
+      sr.request_date,
+      sr.total_amount
+
+  FROM sales_requests sr
+
+  WHERE sr.user_id = $1
+
+  AND DATE(sr.request_date)
+  BETWEEN $2 AND $3
+
+  ORDER BY sr.request_date DESC
+
+  LIMIT 10
+  `,
+  [user.user_id, from, to]
+);
+
+
   // =========================================
   // FINAL RESPONSE
   // =========================================
@@ -194,6 +228,9 @@ exports.getCustomerDashboard = async ({
       company_name: site?.FCYNAM_0 || ""
     },
 
+    recent_orders:
+      recentOrdersResult.rows,
+
     kpis: {
       open_requests:
         Number(kpiResult.rows[0].count),
@@ -201,7 +238,7 @@ exports.getCustomerDashboard = async ({
       sales_orders: 48,
       orders_in_dispatch: 6,
       delivered_orders: 32,
-      pending_payments_amount: 420000,
+      pending_payments_amount: 4200,
       currency: "USD"
     },
 
