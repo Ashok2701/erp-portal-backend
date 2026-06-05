@@ -32,7 +32,7 @@ app.use("/erp", require("./routes/erp.routes"));
 app.use("/api/chat", chatRoutes);
 app.use("/cart", cartRoutes);
 app.use("/", signupRoutes);
-app.use("/api", documentsRoutes);
+app.use("/", documentsRoutes);
 app.use("/orders", salesOrderRoutes);
 
 app.use("/sinvoice", salesInvoiceRoutes);
