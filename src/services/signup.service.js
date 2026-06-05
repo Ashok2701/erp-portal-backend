@@ -178,8 +178,11 @@ exports.sendForVerification = async (admin, userId, body) => {
 
   // Send all active legal documents to user's inbox
   const legalDocs = await db.query(
-    "SELECT * FROM legal_documents WHERE is_active = true"
-  );
+      `SELECT * FROM legal_documents
+       WHERE required_for_signup = TRUE
+         AND is_archived = FALSE
+       ORDER BY id`
+    );
   for (const doc of legalDocs.rows) {
     const contentRes = await db.query(
       `INSERT INTO content (title, message, type, file_url, file_name, priority, created_by)
@@ -536,6 +539,7 @@ function getS3Client() {
     },
     forcePathStyle: false,
   });
+}
 }
 
 async function streamToBuffer(stream) {

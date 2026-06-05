@@ -14,6 +14,7 @@ const PaymentRoutes = require("./routes/payment.routes");
 const dashboardRoutes = require("./routes/dashboard.routes");
 const contentRoutes = require("./routes/content.routes");
 const signupRoutes = require("./routes/signup.routes");
+const documentsRoutes = require("./routes/documents.routes");
 const salesDeliveries = require("./routes/salesDeliveries.routes");
 const app = express();
 
@@ -31,6 +32,7 @@ app.use("/erp", require("./routes/erp.routes"));
 app.use("/api/chat", chatRoutes);
 app.use("/cart", cartRoutes);
 app.use("/", signupRoutes);
+app.use("/api", documentsRoutes);
 app.use("/orders", salesOrderRoutes);
 
 app.use("/sinvoice", salesInvoiceRoutes);
