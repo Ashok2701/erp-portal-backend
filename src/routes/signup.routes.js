@@ -22,4 +22,10 @@ router.post("/user/submit-signatures", auth, ctrl.submitSignatures);
 router.get("/admin/legal-templates", auth, ctrl.getLegalTemplates);
 router.post("/admin/legal-templates", auth, ctrl.createLegalTemplate);
 
+
+router.get("/api/documents/:id/download-url", auth, ctrl.getDocumentDownloadUrl);
+router.get("/api/documents/:id/signed-url", auth, ctrl.getSignedDocumentUrl);
+router.post("/api/documents/:id/sign", auth, ctrl.signDocument);
+router.get("/user/signed-documents", auth, ctrl.getSignedDocuments);
+
 module.exports = router;

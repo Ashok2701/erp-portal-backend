@@ -101,3 +101,41 @@ exports.createLegalTemplate = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+
+exports.getDocumentDownloadUrl = async (req, res) => {
+  try {
+    const data = await service.getDocumentDownloadUrl(req.user, req.params.id);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.signDocument = async (req, res) => {
+  try {
+    const data = await service.signDocument(req.user, req.params.id, req.body, req.ip, req.headers["user-agent"]);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("SIGN DOCUMENT ERROR:", err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.getSignedDocumentUrl = async (req, res) => {
+  try {
+    const data = await service.getSignedDocumentUrl(req.user, req.params.id);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.getSignedDocuments = async (req, res) => {
+  try {
+    const data = await service.getSignedDocuments(req.user);
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

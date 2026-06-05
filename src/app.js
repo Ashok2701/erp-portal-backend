@@ -32,6 +32,7 @@ app.use("/api/chat", chatRoutes);
 app.use("/cart", cartRoutes);
 app.use("/", signupRoutes);
 app.use("/orders", salesOrderRoutes);
+
 app.use("/sinvoice", salesInvoiceRoutes);
 app.use("/squote", salesQuoteRoutes);
 app.use("/deliveries", salesDeliveries);

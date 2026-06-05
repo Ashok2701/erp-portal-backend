@@ -521,3 +521,208 @@ exports.createLegalTemplate = async (admin, body) => {
   );
   return result.rows[0];
 };
+
+const { S3Client, GetObjectCommand, PutObjectCommand } = require("@aws-sdk/client-s3");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const { PDFDocument } = require("pdf-lib");
+
+function getS3Client() {
+  return new S3Client({
+    endpoint: process.env.DO_SPACES_ENDPOINT,
+    region: "us-east-1",
+    credentials: {
+      accessKeyId: process.env.DO_SPACES_KEY,
+      secretAccessKey: process.env.DO_SPACES_SECRET,
+    },
+    forcePathStyle: false,
+  });
+}
+
+async function streamToBuffer(stream) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    stream.on("data", (chunk) => chunks.push(chunk));
+    stream.on("end", () => resolve(Buffer.concat(chunks)));
+    stream.on("error", reject);
+  });
+}
+
+exports.getDocumentDownloadUrl = async (user, docId) => {
+  const doc = await db.query(
+    "SELECT * FROM legal_documents WHERE id = $1 AND is_active = true",
+    [docId]
+  );
+  if (doc.rows.length === 0) throw new Error("Document not found");
+
+  const s3 = getS3Client();
+  // spaces_key might be stored as full URL — extract just the key
+  let key = doc.rows[0].spaces_key || doc.rows[0].file_url;
+  if (key && key.startsWith("http")) {
+    const url = new URL(key);
+    key = url.pathname.replace(/^\//, ""); // strip leading slash
+  }
+
+  const cmd = new GetObjectCommand({
+    Bucket: process.env.DO_SPACES_BUCKET || "portaluploaddocs",
+    Key: key,
+    ResponseContentDisposition: `inline; filename="${doc.rows[0].file_name}"`,
+  });
+  const url = await getSignedUrl(s3, cmd, { expiresIn: 300 });
+  return { url, file_name: doc.rows[0].file_name, title: doc.rows[0].title };
+};
+
+exports.signDocument = async (user, docId, body, ipAddress, userAgent) => {
+  const { signature_data_url } = body;
+  if (!signature_data_url) throw new Error("signature_data_url is required");
+
+  const docResult = await db.query(
+    "SELECT * FROM legal_documents WHERE id = $1",
+    [docId]
+  );
+  if (docResult.rows.length === 0) throw new Error("Document not found");
+  const doc = docResult.rows[0];
+
+  const s3 = getS3Client();
+
+  // 1. Get original PDF key
+  let originalKey = doc.spaces_key || doc.file_url;
+  if (originalKey && originalKey.startsWith("http")) {
+    const u = new URL(originalKey);
+    originalKey = u.pathname.replace(/^\//, "");
+  }
+
+  // 2. Fetch original PDF bytes from Spaces
+  const obj = await s3.send(new GetObjectCommand({
+    Bucket: process.env.DO_SPACES_BUCKET || "portaluploaddocs",
+    Key: originalKey,
+  }));
+  const pdfBytes = await streamToBuffer(obj.Body);
+
+  // 3. Decode signature PNG
+  const sigBase64 = signature_data_url.split(",")[1];
+  const sigBytes = Buffer.from(sigBase64, "base64");
+
+  // 4. Burn signature into PDF using pdf-lib
+  const pdfDoc = await PDFDocument.load(pdfBytes);
+  const sigImage = await pdfDoc.embedPng(sigBytes);
+  const pages = pdfDoc.getPages();
+  const lastPage = pages[pages.length - 1];
+  const { width } = lastPage.getSize();
+
+  lastPage.drawImage(sigImage, {
+    x: 60,
+    y: 80,
+    width: 180,
+    height: 60,
+  });
+  lastPage.drawText(
+    `Signed by ${user.username || user.user_id} on ${new Date().toISOString()}`,
+    { x: 60, y: 60, size: 9 }
+  );
+
+  const signedBytes = await pdfDoc.save();
+
+  // 5. Build signed key: signed/<username>_<filename>
+  const safeUsername = (user.username || user.user_id)
+    .toLowerCase()
+    .replace(/[^a-z0-9._-]/g, "");
+  const originalFileName = doc.file_name || originalKey.split("/").pop();
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const signedFileName = `${safeUsername}_${originalFileName}`;
+  const signedKey = `signed/${safeUsername}_${timestamp}_${originalFileName}`;
+
+  // 6. Upload signed PDF to Spaces
+  await s3.send(new PutObjectCommand({
+    Bucket: process.env.DO_SPACES_BUCKET || "portaluploaddocs",
+    Key: signedKey,
+    Body: signedBytes,
+    ContentType: "application/pdf",
+    ACL: "private",
+  }));
+
+  const signedFileUrl = `https://${process.env.DO_SPACES_BUCKET}.${
+    (process.env.DO_SPACES_ENDPOINT || "").replace("https://", "")
+  }/${signedKey}`;
+
+  // 7. Record in user_signed_documents (create table if needed — see migration below)
+  await db.query(
+    `INSERT INTO user_signed_documents
+     (user_id, username, legal_document_id, signed_spaces_key, signed_file_name, signed_file_url, ip_address, user_agent, signed_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
+     ON CONFLICT (user_id, legal_document_id) DO UPDATE SET
+       signed_spaces_key = EXCLUDED.signed_spaces_key,
+       signed_file_name = EXCLUDED.signed_file_name,
+       signed_file_url = EXCLUDED.signed_file_url,
+       signed_at = NOW()`,
+    [user.user_id, user.username, docId, signedKey, signedFileName, signedFileUrl, ipAddress, userAgent]
+  );
+
+  // 8. Also update the existing user_legal_signatures table for backward compat
+  await db.query(
+    `INSERT INTO user_legal_signatures
+     (user_id, legal_document_id, signature_image, signed_at, ip_address, signed_file_url)
+     VALUES ($1, $2, $3, NOW(), $4, $5)
+     ON CONFLICT DO NOTHING`,
+    [user.user_id, docId, signature_data_url, ipAddress, signedFileUrl]
+  );
+
+  // 9. Check if all required docs are signed → flip status
+  const allDocs = await db.query(
+    "SELECT id FROM legal_documents WHERE is_active = true"
+  );
+  const signedDocs = await db.query(
+    "SELECT legal_document_id FROM user_signed_documents WHERE user_id = $1",
+    [user.user_id]
+  );
+  const signedIds = new Set(signedDocs.rows.map((r) => r.legal_document_id));
+  const allSigned = allDocs.rows.every((r) => signedIds.has(r.id));
+
+  if (allSigned) {
+    await db.query(
+      "UPDATE users SET status = 'PENDING_APPROVAL' WHERE user_id = $1",
+      [user.user_id]
+    );
+    await db.query(
+      `INSERT INTO user_approval_logs
+       (user_id, action, from_status, to_status, notes, created_at)
+       VALUES ($1, 'SUBMIT_SIGNATURES', 'IN_VERIFICATION', 'PENDING_APPROVAL', $2, NOW())`,
+      [user.user_id, `All documents signed via PDF embed`]
+    );
+  }
+
+  return {
+    ok: true,
+    signed_spaces_key: signedKey,
+    signed_file_url: signedFileUrl,
+    all_signed: allSigned,
+  };
+};
+
+exports.getSignedDocumentUrl = async (user, docId) => {
+  const result = await db.query(
+    "SELECT * FROM user_signed_documents WHERE user_id = $1 AND legal_document_id = $2 ORDER BY signed_at DESC LIMIT 1",
+    [user.user_id, docId]
+  );
+  if (result.rows.length === 0) throw new Error("No signed document found");
+
+  const s3 = getS3Client();
+  const cmd = new GetObjectCommand({
+    Bucket: process.env.DO_SPACES_BUCKET || "portaluploaddocs",
+    Key: result.rows[0].signed_spaces_key,
+    ResponseContentDisposition: `inline; filename="${result.rows[0].signed_file_name}"`,
+  });
+  const url = await getSignedUrl(s3, cmd, { expiresIn: 300 });
+  return { url, file_name: result.rows[0].signed_file_name };
+};
+
+exports.getSignedDocuments = async (user) => {
+  const result = await db.query(
+    `SELECT usd.*, ld.title, ld.file_name as original_file_name
+     FROM user_signed_documents usd
+     JOIN legal_documents ld ON usd.legal_document_id = ld.id
+     WHERE usd.user_id = $1
+     ORDER BY usd.signed_at DESC`,
+    [user.user_id]
+  );
+  return result.rows;
+};
