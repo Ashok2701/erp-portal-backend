@@ -82,9 +82,9 @@ exports.uploadDocument = async (admin, file, body) => {
 
   const result = await db.query(
     `INSERT INTO legal_documents
-       (title, description, spaces_key, file_name, file_size_bytes, content_type,
+       (title, description, spaces_key,file_url, file_name, file_size_bytes, content_type,
         version, required_for_signup, is_archived, created_by_user_id, is_active, created_at, updated_at)
-     VALUES ($1,$2,$3,$4,$5,'application/pdf',1,$6,false,$7,true,NOW(),NOW())
+     VALUES ($1,$2,$3,$3,$4,$5,'application/pdf',1,$6,false,$7,true,NOW(),NOW())
      RETURNING *`,
     [
       title,
