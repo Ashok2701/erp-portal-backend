@@ -15,17 +15,17 @@ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
 // ----------------------------------------------------------------
 function getS3() {
   return new S3Client({
-    endpoint: process.env.DO_SPACES_ENDPOINT,
+    endpoint: process.env.DO_SPACES_ENDPOINT || process.env.SPACES_ENDPOINT,
     region: "us-east-1",
     credentials: {
-      accessKeyId:     process.env.DO_SPACES_KEY,
-      secretAccessKey: process.env.DO_SPACES_SECRET,
+      accessKeyId:     process.env.DO_SPACES_KEY || process.env.SPACES_KEY,
+      secretAccessKey: process.env.DO_SPACES_SECRET || process.env.SPACES_SECRET,
     },
     forcePathStyle: false,
   });
 }
 
-const BUCKET = () => process.env.DO_SPACES_BUCKET || "portaluploaddocs";
+const BUCKET = () => process.env.DO_SPACES_BUCKET || process.env.SPACES_BUCKET || "portaluploaddocs";
 
 function nowSlug() {
   return new Date().toISOString().replace(/[:.]/g, "-");
