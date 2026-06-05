@@ -90,6 +90,7 @@ exports.uploadDocument = async (admin, file, body) => {
       title,
       description,
       key,
+      key,
       safeName,
       file.size,
       required_for_signup === "true" || required_for_signup === true,
