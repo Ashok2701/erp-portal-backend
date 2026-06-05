@@ -540,7 +540,7 @@ function getS3Client() {
     forcePathStyle: false,
   });
 }
-}
+
 
 async function streamToBuffer(stream) {
   return new Promise((resolve, reject) => {
