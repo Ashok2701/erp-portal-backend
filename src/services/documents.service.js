@@ -72,6 +72,8 @@ exports.uploadDocument = async (admin, file, body) => {
   const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
   const key      = `template/${safeName}`;
 
+
+
   await getS3().send(new PutObjectCommand({
     Bucket:      BUCKET(),
     Key:         key,
@@ -80,17 +82,19 @@ exports.uploadDocument = async (admin, file, body) => {
     ACL:         "private",
   }));
 
+ const fileUrl = String(key);
+
   const result = await db.query(
     `INSERT INTO legal_documents
        (title, description, spaces_key,file_url, file_name, file_size_bytes, content_type,
         version, required_for_signup, is_archived, created_by_user_id, is_active, created_at, updated_at)
-     VALUES ($1,$2,$3,$3,$4,$5,'application/pdf',1,$6,false,$7,true,NOW(),NOW())
+     VALUES ($1,$2,$3,$4,$5,$6,'application/pdf',1,$7,false,$8,true,NOW(),NOW())
      RETURNING *`,
     [
       title,
       description,
       key,
-      key,
+      fileUrl,
       safeName,
       file.size,
       required_for_signup === "true" || required_for_signup === true,
