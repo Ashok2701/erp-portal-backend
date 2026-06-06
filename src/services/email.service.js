@@ -177,3 +177,8 @@ exports.sendWelcomeEmail = async (email, data) => {
     </div>
   `);
 };
+
+// Generic send — used by signup.service.js
+exports.sendEmail = async (to, subject, html) => {
+  return sendEmail(to, subject, html);
+};

@@ -408,37 +408,48 @@ exports.submitSignatures = async (user, body) => {
       );
       const username = userResult.rows[0]?.username || user.user_id;
 
+
       // If you have Spaces configured, upload the signed image
-      if (process.env.SPACES_ENDPOINT && process.env.SPACES_KEY) {
-        const AWS = require("aws-sdk");
-        const spacesEndpoint = new AWS.Endpoint(process.env.SPACES_ENDPOINT);
-        const s3 = new AWS.S3({
-          endpoint: spacesEndpoint,
-          accessKeyId: process.env.SPACES_KEY,
-          secretAccessKey: process.env.SPACES_SECRET,
-        });
+    const spacesKey    = process.env.DO_SPACES_KEY    || process.env.SPACES_KEY;
+    const spacesSecret = process.env.DO_SPACES_SECRET || process.env.SPACES_SECRET;
+    const spacesEp     = process.env.DO_SPACES_ENDPOINT || process.env.SPACES_ENDPOINT;
+    const spacesBucket = process.env.DO_SPACES_BUCKET   || process.env.SPACES_BUCKET || "portaluploaddocs";
 
-        const buffer = Buffer.from(
-          sig.signature_image.replace(/^data:image\/\w+;base64,/, ""),
-          "base64"
-        );
-        const key = `Legaldocs/${username}_doc_${sig.legal_document_id}_${Date.now()}.png`;
+    if (spacesEp && spacesKey) {
+      const { S3Client, PutObjectCommand } = require("@aws-sdk/client-s3");
+      const s3v3 = new S3Client({
+        endpoint: spacesEp,
+        region: "us-east-1",
+        credentials: {
+          accessKeyId:     spacesKey,
+          secretAccessKey: spacesSecret,
+        },
+        forcePathStyle: false,
+      });
 
-        await s3.putObject({
-          Bucket: process.env.SPACES_BUCKET || "portaluploaddocs",
-          Key: key,
-          Body: buffer,
-          ContentType: "image/png",
-          ACL: "public-read",
-        }).promise();
+      const buffer = Buffer.from(
+        sig.signature_image.replace(/^data:image\/\w+;base64,/, ""),
+        "base64"
+      );
+      const key = `Legaldocs/${username}_doc_${sig.legal_document_id}_${Date.now()}.png`;
 
-        const fileUrl = `https://${process.env.SPACES_BUCKET}.${process.env.SPACES_ENDPOINT.replace('https://', '')}/${key}`;
+      await s3v3.send(new PutObjectCommand({
+        Bucket:      spacesBucket,
+        Key:         key,
+        Body:        buffer,
+        ContentType: "image/png",
+        ACL:         "private",
+      }));
 
-        await db.query(
-          "UPDATE user_legal_signatures SET signed_file_url = $1 WHERE user_id = $2 AND legal_document_id = $3",
-          [fileUrl, user.user_id, sig.legal_document_id]
-        );
-      }
+      const fileUrl = `${spacesEp}/${spacesBucket}/${key}`;
+
+      await db.query(
+        "UPDATE user_legal_signatures SET signed_file_url = $1 WHERE user_id = $2 AND legal_document_id = $3",
+        [fileUrl, user.user_id, sig.legal_document_id]
+      );
+    }
+
+
     } catch (uploadErr) {
       console.error("Spaces upload error:", uploadErr.message);
       // Don't fail the whole operation if upload fails
