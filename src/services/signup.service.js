@@ -531,11 +531,11 @@ const { PDFDocument } = require("pdf-lib");
 
 function getS3Client() {
   return new S3Client({
-    endpoint: process.env.DO_SPACES_ENDPOINT,
+    endpoint: process.env.DO_SPACES_ENDPOINT || process.env.SPACES_ENDPOINT,
     region: "us-east-1",
     credentials: {
-      accessKeyId: process.env.DO_SPACES_KEY,
-      secretAccessKey: process.env.DO_SPACES_SECRET,
+      accessKeyId:     process.env.DO_SPACES_KEY    || process.env.SPACES_KEY,
+      secretAccessKey: process.env.DO_SPACES_SECRET || process.env.SPACES_SECRET,
     },
     forcePathStyle: false,
   });
@@ -553,26 +553,39 @@ async function streamToBuffer(stream) {
 
 exports.getDocumentDownloadUrl = async (user, docId) => {
   const doc = await db.query(
-    "SELECT * FROM legal_documents WHERE id = $1 AND is_active = true",
+    "SELECT * FROM legal_documents WHERE id = $1",
     [docId]
   );
   if (doc.rows.length === 0) throw new Error("Document not found");
+  const d = doc.rows[0];
 
-  const s3 = getS3Client();
-  // spaces_key might be stored as full URL — extract just the key
-  let key = doc.rows[0].spaces_key || doc.rows[0].file_url;
-  if (key && key.startsWith("http")) {
-    const url = new URL(key);
-    key = url.pathname.replace(/^\//, ""); // strip leading slash
+  // Robustly extract the Spaces key from either spaces_key or file_url
+  let key = d.spaces_key || d.file_url || "";
+  if (key.startsWith("http")) {
+    // e.g. https://bucket.region.digitaloceanspaces.com/template/file.pdf
+    // → template/file.pdf
+    const u = new URL(key);
+    key = u.pathname.replace(/^\/[^/]+\//, ""); // strip /bucketname/
+    // fallback if above doesn't work
+    if (!key || key === "/") {
+      key = u.pathname.replace(/^\//, "");
+    }
   }
 
+  console.log("Fetching from Spaces key:", key); // debug
+
+  const s3 = getS3Client();
   const cmd = new GetObjectCommand({
-    Bucket: process.env.DO_SPACES_BUCKET || "portaluploaddocs",
+    Bucket: process.env.DO_SPACES_BUCKET || process.env.SPACES_BUCKET || "portaluploaddocs",
     Key: key,
-    ResponseContentDisposition: `inline; filename="${doc.rows[0].file_name}"`,
+    ResponseContentDisposition: `inline; filename="${d.file_name}"`,
   });
+
+  console.log("Spaces key being used:", key);
+  console.log("Bucket:", process.env.DO_SPACES_BUCKET || process.env.SPACES_BUCKET);
+
   const url = await getSignedUrl(s3, cmd, { expiresIn: 300 });
-  return { url, file_name: doc.rows[0].file_name, title: doc.rows[0].title };
+  return { url, file_name: d.file_name, title: d.title };
 };
 
 exports.signDocument = async (user, docId, body, ipAddress, userAgent) => {
@@ -633,7 +646,11 @@ exports.signDocument = async (user, docId, body, ipAddress, userAgent) => {
   const originalFileName = doc.file_name || originalKey.split("/").pop();
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const signedFileName = `${safeUsername}_${originalFileName}`;
-  const signedKey = `signed/${safeUsername}_${timestamp}_${originalFileName}`;
+
+ // const signedKey = `signed/${safeUsername}_${timestamp}_${originalFileName}`;
+
+  const signedKey = `signed/${safeUsername}_${originalFileName.replace('.pdf','')}_signed.pdf`;
+  const signedFileName = `${safeUsername}_${originalFileName.replace('.pdf','')}_signed.pdf`;
 
   // 6. Upload signed PDF to Spaces
   await s3.send(new PutObjectCommand({
@@ -674,6 +691,19 @@ exports.signDocument = async (user, docId, body, ipAddress, userAgent) => {
   const allDocs = await db.query(
     "SELECT id FROM legal_documents WHERE is_active = true"
   );
+
+  const allDocs = await db.query(
+    `SELECT DISTINCT ct.content_id, ld.id
+     FROM content_targets ct
+     JOIN content c ON ct.content_id = c.id
+     JOIN legal_documents ld ON c.file_name = ld.file_name
+     WHERE ct.target_type = 'USER'
+       AND ct.target_value = $1
+       AND ld.required_for_signup = TRUE
+       AND ld.is_archived = FALSE`,
+    [user.user_id]
+  );
+
   const signedDocs = await db.query(
     "SELECT legal_document_id FROM user_signed_documents WHERE user_id = $1",
     [user.user_id]
@@ -702,21 +732,26 @@ exports.signDocument = async (user, docId, body, ipAddress, userAgent) => {
   };
 };
 
+
 exports.getSignedDocumentUrl = async (user, docId) => {
   const result = await db.query(
-    "SELECT * FROM user_signed_documents WHERE user_id = $1 AND legal_document_id = $2 ORDER BY signed_at DESC LIMIT 1",
+    `SELECT * FROM user_signed_documents
+     WHERE user_id = $1 AND legal_document_id = $2
+     ORDER BY signed_at DESC LIMIT 1`,
     [user.user_id, docId]
   );
   if (result.rows.length === 0) throw new Error("No signed document found");
+  const row = result.rows[0];
 
   const s3 = getS3Client();
   const cmd = new GetObjectCommand({
-    Bucket: process.env.DO_SPACES_BUCKET || "portaluploaddocs",
-    Key: result.rows[0].signed_spaces_key,
-    ResponseContentDisposition: `inline; filename="${result.rows[0].signed_file_name}"`,
+    Bucket: process.env.DO_SPACES_BUCKET || process.env.SPACES_BUCKET || "portaluploaddocs",
+    Key: row.signed_spaces_key,
+    ResponseContentDisposition: `inline; filename="${row.signed_file_name}"`,
   });
+
   const url = await getSignedUrl(s3, cmd, { expiresIn: 300 });
-  return { url, file_name: result.rows[0].signed_file_name };
+  return { url, file_name: row.signed_file_name };
 };
 
 exports.getSignedDocuments = async (user) => {
