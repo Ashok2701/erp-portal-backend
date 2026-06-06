@@ -645,7 +645,7 @@ exports.signDocument = async (user, docId, body, ipAddress, userAgent) => {
     .replace(/[^a-z0-9._-]/g, "");
   const originalFileName = doc.file_name || originalKey.split("/").pop();
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const signedFileName = `${safeUsername}_${originalFileName}`;
+ // const signedFileName = `${safeUsername}_${originalFileName}`;
 
  // const signedKey = `signed/${safeUsername}_${timestamp}_${originalFileName}`;
 
