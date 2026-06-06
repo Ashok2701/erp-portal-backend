@@ -688,9 +688,9 @@ exports.signDocument = async (user, docId, body, ipAddress, userAgent) => {
   );
 
   // 9. Check if all required docs are signed → flip status
-  const allDocs = await db.query(
-    "SELECT id FROM legal_documents WHERE is_active = true"
-  );
+//  const allDocs = await db.query(
+//    "SELECT id FROM legal_documents WHERE is_active = true"
+//  );
 
   const allDocs = await db.query(
     `SELECT DISTINCT ct.content_id, ld.id
