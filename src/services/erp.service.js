@@ -20,14 +20,14 @@ exports.createSalesOrder = async (salesRequest) => {
 
 exports.getCustomers = async () => {
 
-   const adapter = ERPFactory.getERPAdapter();
+   const adapter = ERPFactory.getERPAdapterForUser(user);
 
    return adapter.getCustomers();
 };
 
 exports.getSuppliers = async () => {
 
-   const adapter = ERPFactory.getERPAdapter();
+   const adapter = ERPFactory.getERPAdapterForUser(user);
 
    return adapter.getSuppliers();
 };
@@ -37,7 +37,7 @@ exports.getProducts =
   async (filters) => {
 
     const adapter =
-      ERPFactory.getERPAdapter(filters);
+      ERPFactory.getERPAdapterForUser(user);
 
     console.time("TOTAL_PRODUCTS");
 
@@ -112,7 +112,7 @@ exports.getProducts_2 =
   async (filters) => {
 
     const adapter =
-      ERPFactory.getERPAdapter(filters);
+      ERPFactory.getERPAdapterForUser(user);
 
     // -----------------------------
     // LOAD DATA
@@ -176,19 +176,19 @@ exports.getProducts_2 =
 exports.getProductCategories = async () => {
 //  const connection = await getERPConnection(tenantId);
 
-  const adapter = ERPFactory.getERPAdapter();
+  const adapter = ERPFactory.getERPAdapterForUser(user);
 
   return adapter.getProductCategories();
 };
 
 
 exports.getCustomerAddresses = async (customerCode) => {
-  const adapter = ERPFactory.getERPAdapter();
+  const adapter = ERPFactory.getERPAdapterForUser(user);
   return adapter.getCustomerAddresses(customerCode);
 };
 
 exports.getSupplierAddresses = async (supplierCode) => {
-  const adapter = ERPFactory.getERPAdapter();
+  const adapter = ERPFactory.getERPAdapterForUser(user);
   return adapter.getSupplierAddresses(supplierCode);
 };
 
@@ -196,13 +196,13 @@ exports.getSupplierAddresses = async (supplierCode) => {
 // STOCK
 
 exports.getStock = async (filters) => {
-  const adapter = ERPFactory.getERPAdapter();
+  const adapter = ERPFactory.getERPAdapterForUser(user);
   return adapter.getStock(filters);
 };
 
 // SITES
 
 exports.getAllSites = async () => {
-  const adapter = ERPFactory.getERPAdapter();
+  const adapter = ERPFactory.getERPAdapterForUser(user);
   return adapter.getAllSites();
 };

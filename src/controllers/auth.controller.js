@@ -90,17 +90,17 @@ const expiresIn = process.env.JWT_EXPIRES_IN || "8h";
 );
 
 res.json({token,  user: {
-                     user_id: user.user_id,
-                     tenant_id: user.tenant_id,
-                     username: user.username,
-                     role: roleName || "CUSTOMER",
+                     user_id:        user.user_id,
+                     tenant_id:      user.tenant_id,
+                     username:       user.username,
+                     role:           roleName || "CUSTOMER",
                      erp_customer_code: erpContext.erp_customer_code,
                      erp_supplier_code: erpContext.erp_supplier_code,
-                     status: user.status || "ACTIVE",
-                     allowedsite : user.allowedsite,
-                     portal_mode: user.portal_mode || "b2c",
+                     status:         user.status || "ACTIVE",
+                     allowedsite:    user.allowedsite,
+                     portal_mode:    user.portal_mode || "b2c",
+                     is_super_admin: user.is_super_admin || false,
                      roles
-
                    }
                    });
 }

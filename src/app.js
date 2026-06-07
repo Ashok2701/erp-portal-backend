@@ -16,7 +16,8 @@ const contentRoutes = require("./routes/content.routes");
 const signupRoutes = require("./routes/signup.routes");
 const documentsRoutes = require("./routes/documents.routes");
 const salesDeliveries = require("./routes/salesDeliveries.routes");
-const inventoryRoutes = require("./routes/inventory.routes");
+const inventoryRoutes   = require("./routes/inventory.routes");
+const superadminRoutes  = require("./routes/superadmin.routes");
 const app = express();
 
 app.use(cors());
@@ -44,6 +45,7 @@ app.use("/payment", PaymentRoutes);
 app.use("/content", contentRoutes);
 
 app.use("/dashboard", dashboardRoutes);
-app.use("/inventory", inventoryRoutes);
+app.use("/inventory",   inventoryRoutes);
+app.use("/superadmin",  superadminRoutes);
 
 module.exports = app;

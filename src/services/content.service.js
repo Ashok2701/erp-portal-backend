@@ -55,10 +55,11 @@ exports.createContent = async (user, body) => {
   try {
     await client.query("BEGIN");
 
+    const tenantId = user.tenant_id;
     const contentRes = await client.query(
       `INSERT INTO content
-       (title, message, type, file_url, file_name, file_type, priority, expiry_date, created_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       (title, message, type, file_url, file_name, file_type, priority, expiry_date, created_by, tenant_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
        RETURNING *`,
       [
         body.title,
@@ -70,6 +71,7 @@ exports.createContent = async (user, body) => {
         body.priority,
         body.expiry_date,
         uid(user),
+        tenantId,
       ]
     );
 
@@ -152,8 +154,9 @@ exports.getFeed = async (user) => {
        JOIN content_targets ct ON c.id = ct.content_id
        LEFT JOIN user_content uc ON uc.content_id = c.id AND uc.user_id = $1
        WHERE ct.target_type = 'USER' AND ct.target_value = $1::text
+       AND c.tenant_id = $2
        ORDER BY c.created_at DESC`,
-      [userId]
+      [userId, user.tenant_id]
     );
   } else {
     result = await db.query(

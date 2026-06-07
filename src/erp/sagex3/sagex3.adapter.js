@@ -1,12 +1,35 @@
-const BaseERPAdapter = require("../base.adapter");
-const UserModel = require("../../models/user.model");
-
-const {
-  sql,
-  poolPromise
-} = require("../../config/erp-db");
+const BaseERPAdapter  = require("../base.adapter");
+const UserModel       = require("../../models/user.model");
+const erpDbManager    = require("../erpDbManager");
+const mssql           = require("mssql");
+const sql             = mssql; // alias for existing code
 
 class SageX3Adapter extends BaseERPAdapter {
+
+  constructor(settings = {}) {
+    super();
+    this.settings = settings;
+    this._poolPromise = null;
+  }
+
+  // Returns the mssql pool for this tenant's ERP DB
+  get poolPromise() {
+    if (!this._poolPromise) {
+      this._poolPromise = erpDbManager.getErpDbPool(this.settings);
+    }
+    return this._poolPromise;
+  }
+
+  // Convenience getters for X3 business config
+  get poolAlias()  { return this.settings.x3_pool_alias  || process.env.X3_POOL_ALIAS; }
+  get salesSite()  { return this.settings.x3_sales_site  || process.env.X3_SALES_SITE; }
+  get orderType()  { return this.settings.x3_order_type  || process.env.X3_ORDER_TYPE; }
+  get soapUrl()    { return this.settings.x3_soap_url    || process.env.X3_SOAP_URL; }
+  get wsdlUrl()    { return this.settings.x3_wsdl_url    || process.env.X3_WSDL_URL; }
+  get x3Username() { return this.settings.x3_username    || process.env.X3_USERNAME; }
+  get x3Password() { return this.settings.x3_password    || process.env.X3_PASSWORD; }
+
+
 
   async resolveCustomerCode(req) {
 
@@ -63,8 +86,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getProducts(filters = {}) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const request =
       pool.request();
@@ -149,8 +171,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getProducts_2(filters = {}) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     let query = `
 
@@ -201,8 +222,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getProducts_1(filters = {}) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     let query = `
       SELECT
@@ -245,8 +265,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getProductCategories() {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const result =
       await pool.request().query(`
@@ -265,8 +284,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getSuppliersFromDB() {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const result =
       await pool.request().query(`
@@ -285,8 +303,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getCustomersFromDB() {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const result =
       await pool.request().query(`
@@ -305,8 +322,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getCustomerAddressesFromDB(customerCode) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const query = `
       SELECT
@@ -342,8 +358,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getSupplierAddressesFromDB(supplierCode) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const query = `
       SELECT
@@ -379,8 +394,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getAllQuotes(req) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const customerCode =
       await this.resolveCustomerCode(req);
@@ -463,8 +477,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getQuoteDetail(id, user) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const result =
       await pool.request()
@@ -518,8 +531,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getAllDeliveries(req) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const customerCode =
       await this.resolveCustomerCode(req);
@@ -604,8 +616,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getDeliveryDetail(id, user) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const result =
       await pool.request()
@@ -661,8 +672,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getAllOrders(req) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const customerCode =
       await this.resolveCustomerCode(req);
@@ -744,8 +754,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getOrderDetail(id, user) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const result =
       await pool.request()
@@ -802,8 +811,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getAllInvoices(req) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const customerCode =
       await this.resolveCustomerCode(req);
@@ -851,8 +859,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getInvoiceDetail(id, user) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const headerRes =
       await pool.request()
@@ -902,8 +909,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getPendingInvoices(req) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const customerCode =
       await this.resolveCustomerCode(req);
@@ -954,8 +960,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getAllPayments(req) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const customerCode =
       await this.resolveCustomerCode(req);
@@ -1028,8 +1033,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getPaymentDetail(id, user) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const headerRes =
       await pool.request()
@@ -1080,8 +1084,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getPaymentPendingInvoices(req) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const customerCode =
       await this.resolveCustomerCode(req);
@@ -1131,8 +1134,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getStockFromDb(filters = {}) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     let query = `
       SELECT
@@ -1201,8 +1203,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getPriceLists(filters = {}) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const request =
       pool.request();
@@ -1258,8 +1259,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getPriceLists_1(filters = {}) {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const query = `
       SELECT
@@ -1292,8 +1292,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
   async getAllSites() {
 
-    const pool =
-      await poolPromise;
+    const pool = await this.poolPromise;
 
     const result =
       await pool.request().query(`

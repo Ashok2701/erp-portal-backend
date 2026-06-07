@@ -2,8 +2,6 @@ const db = require("../config/db");
 const bcrypt = require("bcrypt");
 const { v4: uuidv4 } = require("uuid");
 
-const DEFAULT_TENANT_ID = "7d9e33cc-6a5f-4bd4-a76c-bdcb60b03d58";
-
 // ==================== SIGNUP ====================
 
 exports.signup = async (body) => {
@@ -30,7 +28,7 @@ exports.signup = async (body) => {
      (user_id, tenant_id, username, full_name, email, contact_number, password_hash,
       requested_role, company_details, status, is_active, created_at)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'PENDING_REVIEW', false, NOW())`,
-    [userId, DEFAULT_TENANT_ID, username, full_name, email, phone, hashedPassword,
+    [userId, body.tenant_id || '7d9e33cc-6a5f-4bd4-a76c-bdcb60b03d58', username, full_name, email, phone, hashedPassword,
      requested_role || 'Customer', company_details]
   );
 
@@ -366,7 +364,7 @@ exports.updateRole = async (admin, userId, body) => {
 
 exports.getLegalDocuments = async (user) => {
   const docs = await db.query(
-    "SELECT * FROM legal_documents WHERE is_active = true ORDER BY id"
+    "SELECT * FROM legal_documents WHERE is_active = true AND tenant_id = $1 ORDER BY id", [user.tenant_id]
   );
 
   const signed = await db.query(
@@ -522,7 +520,7 @@ exports.submitSignatures = async (user, body) => {
 
 exports.getLegalTemplates = async () => {
   const result = await db.query(
-    "SELECT * FROM legal_documents ORDER BY created_at DESC"
+    "SELECT * FROM legal_documents WHERE tenant_id = $1 ORDER BY created_at DESC", [admin.tenant_id || admin.user_id]
   );
   return result.rows;
 };

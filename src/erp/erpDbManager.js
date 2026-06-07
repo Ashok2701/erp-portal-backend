@@ -1,47 +1,46 @@
+"use strict";
 const { Pool: PgPool } = require("pg");
 const mssql = require("mssql");
 
+// Pool keyed by "tenantId_dbHost_dbName" — allows same server, different DBs
 const pools = {};
 
-exports.getErpDbPool = async (conn) => {
-  const key = `${conn.erp_system}_${conn.tenant_id}`;
+exports.getErpDbPool = async (settings) => {
+  const key = `${settings.tenant_id || "default"}_${settings.erp_db_host}_${settings.erp_db_name}`;
 
-  if (pools[key]) {
-    return pools[key];
-  }
+  if (pools[key]) return pools[key];
 
-  // MSSQL
-  if (conn.db_type === "mssql") {
+  const dbType = (settings.erp_db_type || "mssql").toLowerCase();
+
+  if (dbType === "mssql") {
     const pool = await mssql.connect({
-      user: conn.db_user,
-      password: conn.db_password,
-      server: conn.db_host,
-      database: conn.db_name,
-      port: conn.db_port,
-      options: {
-        encrypt: false,            // set true for Azure SQL
-        trustServerCertificate: true
-      }
+      user:     settings.erp_db_user,
+      password: settings.erp_db_password,
+      server:   settings.erp_db_host,
+      database: settings.erp_db_name,
+      port:     parseInt(settings.erp_db_port) || 1433,
+      options:  { encrypt: false, trustServerCertificate: true },
     });
-
     pools[key] = pool;
     return pool;
   }
 
-  // PostgreSQL
-  if (conn.db_type === "postgres") {
+  if (dbType === "postgres") {
     const pool = new PgPool({
-      host: conn.db_host,
-      port: conn.db_port,
-      database: conn.db_name,
-      user: conn.db_user,
-      password: conn.db_password,
-      ssl: false
+      host:     settings.erp_db_host,
+      port:     parseInt(settings.erp_db_port) || 5432,
+      database: settings.erp_db_name,
+      user:     settings.erp_db_user,
+      password: settings.erp_db_password,
+      ssl: false,
     });
-
     pools[key] = pool;
     return pool;
   }
 
-  throw new Error(`Unsupported DB type: ${conn.db_type}`);
+  throw new Error(`Unsupported ERP DB type: ${dbType}`);
+};
+
+exports.clearPool = (tenantId) => {
+  Object.keys(pools).filter(k => k.startsWith(tenantId)).forEach(k => delete pools[k]);
 };

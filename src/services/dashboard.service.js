@@ -45,7 +45,7 @@ GROUP BY r.role_name
   `);
 
   // ---------- PRODUCTS (ERP) ----------
-  const adapter = ERPFactory.getERPAdapter();
+  const adapter = ERPFactory.getERPAdapterForUser(user);
 
   const products = await adapter.getProducts({});
   const categories = await adapter.getProductCategories();

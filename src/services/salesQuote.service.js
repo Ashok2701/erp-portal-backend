@@ -1,11 +1,11 @@
 const ERPFactory = require("../erp/erp.factory");
 
 exports.getAll = async (user) => {
-  const adapter = ERPFactory.getERPAdapter();
+  const adapter = ERPFactory.getERPAdapterForUser(user);
   return adapter.getAllQuotes(user);
 };
 
 exports.getById = async (id, user) => {
-  const adapter = ERPFactory.getERPAdapter();
+  const adapter = ERPFactory.getERPAdapterForUser(user);
   return adapter.getQuoteDetail(id, user);
 };

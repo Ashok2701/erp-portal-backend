@@ -69,8 +69,9 @@ exports.uploadDocument = async (admin, file, body) => {
   if (file.mimetype !== "application/pdf")
     throw new Error("Only PDF files are accepted");
 
-  const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const key      = `template/${safeName}`;
+  const safeName   = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const tenantSlug = admin.tenant_slug || "temaglobal";
+  const key        = `${tenantSlug}/LegalDocs/${safeName}`;
 
 
 
@@ -144,9 +145,7 @@ exports.replaceDocument = async (id, admin, file) => {
   const s3 = getS3();
 
   // 1. Copy current file to archive folder
-  const archiveKey = `template_archive/${
-    (doc.file_name || "doc").replace(/\.pdf$/i, "")
-  }__v${doc.version}__${nowSlug()}.pdf`;
+  const archiveKey = `${admin.tenant_slug || "temaglobal"}/LegalDocs/archive/${(doc.file_name || "doc").replace(/\.pdf$/i, "")}__v${doc.version}__${nowSlug()}.pdf`;
 
   await s3.send(new CopyObjectCommand({
     Bucket:     BUCKET(),
@@ -164,8 +163,9 @@ exports.replaceDocument = async (id, admin, file) => {
   );
 
   // 3. Upload new file under the same template/ key
-  const safeName = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
-  const newKey   = `template/${safeName}`;
+  const safeName   = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
+  const tenantSlug2 = admin.tenant_slug || "temaglobal";
+  const newKey      = `${tenantSlug2}/LegalDocs/${safeName}`;
 
   await s3.send(new PutObjectCommand({
     Bucket:      BUCKET(),

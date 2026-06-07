@@ -16,6 +16,7 @@ exports.getModulesByUserId = async (userId) => {
     WHERE ur.user_id = $1
       AND m.is_active = true
       AND rm.can_view = true
+      AND (m.tenant_id IS NULL OR m.tenant_id = u.tenant_id)
       AND (
         COALESCE(m.portal_mode, 'both') = 'both'
         OR COALESCE(m.portal_mode, 'both') = COALESCE(u.portal_mode, 'b2c')
