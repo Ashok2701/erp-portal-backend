@@ -26,7 +26,7 @@ async function resolveUserContext(user) {
 // ── main dispatcher ──────────────────────────────────────────
 exports.getInventory = async (user, view, filters = {}) => {
   const ctx     = await resolveUserContext(user);
-  const adapter = ERPFactory.getERPAdapterForUser(user);
+  const adapter = await ERPFactory.getERPAdapterForUser(user);
 
   switch (view) {
     case "consignment":  return getConsignment(adapter, ctx, filters);
@@ -41,7 +41,7 @@ exports.getInventory = async (user, view, filters = {}) => {
 // ── summary counts for dashboard/header cards ─────────────────
 exports.getSummary = async (user) => {
   const ctx     = await resolveUserContext(user);
-  const adapter = ERPFactory.getERPAdapterForUser(user);
+  const adapter = await ERPFactory.getERPAdapterForUser(user);
 
   const stock = await adapter.getStock({
     site:     ctx.site,

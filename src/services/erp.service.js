@@ -18,26 +18,26 @@ exports.createSalesOrder = async (salesRequest) => {
 };
 
 
-exports.getCustomers = async () => {
+exports.getCustomers = async (user) => {
 
-   const adapter = ERPFactory.getERPAdapterForUser(user);
+   const adapter = await ERPFactory.getERPAdapterForUser(user);
 
    return adapter.getCustomers();
 };
 
-exports.getSuppliers = async () => {
+exports.getSuppliers = async (user) => {
 
-   const adapter = ERPFactory.getERPAdapterForUser(user);
+   const adapter = await ERPFactory.getERPAdapterForUser(user);
 
    return adapter.getSuppliers();
 };
 
 
 exports.getProducts =
-  async (filters) => {
+  async (filters, user) => {
 
     const adapter =
-      ERPFactory.getERPAdapterForUser(user);
+      await ERPFactory.getERPAdapterForUser(user);
 
     console.time("TOTAL_PRODUCTS");
 
@@ -112,7 +112,7 @@ exports.getProducts_2 =
   async (filters) => {
 
     const adapter =
-      ERPFactory.getERPAdapterForUser(user);
+      await ERPFactory.getERPAdapterForUser(user);
 
     // -----------------------------
     // LOAD DATA
@@ -182,27 +182,27 @@ exports.getProductCategories = async () => {
 };
 
 
-exports.getCustomerAddresses = async (customerCode) => {
-  const adapter = ERPFactory.getERPAdapterForUser(user);
+exports.getCustomerAddresses = async (customerCode, user) => {
+  const adapter = await ERPFactory.getERPAdapterForUser(user);
   return adapter.getCustomerAddresses(customerCode);
 };
 
-exports.getSupplierAddresses = async (supplierCode) => {
-  const adapter = ERPFactory.getERPAdapterForUser(user);
+exports.getSupplierAddresses = async (supplierCode, user) => {
+  const adapter = await ERPFactory.getERPAdapterForUser(user);
   return adapter.getSupplierAddresses(supplierCode);
 };
 
 
 // STOCK
 
-exports.getStock = async (filters) => {
-  const adapter = ERPFactory.getERPAdapterForUser(user);
+exports.getStock = async (filters, user) => {
+  const adapter = await ERPFactory.getERPAdapterForUser(user);
   return adapter.getStock(filters);
 };
 
 // SITES
 
-exports.getAllSites = async () => {
-  const adapter = ERPFactory.getERPAdapterForUser(user);
+exports.getAllSites = async (user) => {
+  const adapter = await ERPFactory.getERPAdapterForUser(user);
   return adapter.getAllSites();
 };

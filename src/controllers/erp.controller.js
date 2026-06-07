@@ -2,21 +2,21 @@ const erpService = require("../services/erp.service");
 
 exports.getCustomers = async (req, res) => {
 
-  const customers = await erpService.getCustomers();
+  const customers = await erpService.getCustomers(req.user);
 
   res.json(customers);
 };
 
 exports.getSuppliers = async (req, res) => {
 
-  const suppliers = await erpService.getSuppliers();
+  const suppliers = await erpService.getSuppliers(req.user);
 
   res.json(suppliers);
 };
 
 exports.getProducts11 = async (req, res) => {
 
-  const customers = await erpService.getCustomers();
+  const customers = await erpService.getCustomers(req.user);
 
   res.json(customers);
 };
@@ -24,7 +24,7 @@ exports.getProducts11 = async (req, res) => {
 
 exports.getDashboard = async (req, res) => {
 
-  const customers = await erpService.getCustomers();
+  const customers = await erpService.getCustomers(req.user);
 
   res.json(customers);
 };
@@ -60,7 +60,7 @@ exports.getProductCategories = async (req, res) => {
   try {
    // const tenantId = req.user.tenantId;
 
-    const data = await erpService.getProductCategories();
+    const data = await erpService.getProductCategories(req.user);
 
     res.json({ success: true, data });
   } catch (error) {
@@ -73,7 +73,7 @@ exports.getCustomerAddresses = async (req, res) => {
   try {
     const { customerCode } = req.params;
 
-    const data = await erpService.getCustomerAddresses(customerCode);
+    const data = await erpService.getCustomerAddresses(customerCode, req.user);
 
     res.json({ success: true, data });
   } catch (err) {
@@ -86,7 +86,7 @@ exports.getSupplierAddresses = async (req, res) => {
   try {
     const { supplierCode } = req.params;
 
-    const data = await erpService.getSupplierAddresses(supplierCode);
+    const data = await erpService.getSupplierAddresses(supplierCode, req.user);
 
     res.json({ success: true, data });
   } catch (err) {
@@ -100,7 +100,7 @@ exports.getStock = async (req, res) => {
   try {
     const filters = req.query;
 
-    const data = await erpService.getStock(filters);
+    const data = await erpService.getStock(filters, req.user);
 
     res.json({ success: true, data });
   } catch (err) {
@@ -113,7 +113,7 @@ exports.getAllSites = async (req, res) => {
   try {
     const filters = req.query;
 
-    const data = await erpService.getAllSites(filters);
+    const data = await erpService.getAllSites(req.user);
 
     res.json({ success: true, data });
   } catch (err) {
