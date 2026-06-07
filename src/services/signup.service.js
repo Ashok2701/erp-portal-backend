@@ -397,7 +397,7 @@ exports.submitSignatures = async (user, body) => {
       `INSERT INTO user_legal_signatures
        (user_id, legal_document_id, signature_image, signed_at, ip_address)
        VALUES ($1, $2, $3, NOW(), $4)
-       ON CONFLICT DO NOTHING`,
+       ON CONFLICT (user_id, legal_document_id) DO UPDATE SET signature_image = EXCLUDED.signature_image, signed_at = NOW()`,
       [user.user_id, sig.legal_document_id, sig.signature_image, body.ip_address || '']
     );
 
@@ -694,7 +694,7 @@ exports.signDocument = async (user, docId, body, ipAddress, userAgent) => {
     `INSERT INTO user_legal_signatures
      (user_id, legal_document_id, signature_image, signed_at, ip_address, signed_file_url)
      VALUES ($1, $2, $3, NOW(), $4, $5)
-     ON CONFLICT DO NOTHING`,
+     ON CONFLICT (user_id, legal_document_id) DO UPDATE SET signature_image = EXCLUDED.signature_image, signed_at = NOW()`,
     [user.user_id, docId, signature_data_url, ipAddress, signedFileUrl]
   );
 
@@ -703,13 +703,14 @@ exports.signDocument = async (user, docId, body, ipAddress, userAgent) => {
 //    "SELECT id FROM legal_documents WHERE is_active = true"
 //  );
 
+  // Get all required docs that were sent to this user via their inbox
   const allDocs = await db.query(
-    `SELECT DISTINCT ct.content_id, ld.id
-     FROM content_targets ct
-     JOIN content c ON ct.content_id = c.id
-     JOIN legal_documents ld ON c.file_name = ld.file_name
+    `SELECT DISTINCT ld.id
+     FROM legal_documents ld
+     JOIN content c ON c.file_name = ld.file_name AND c.type = 'DOCUMENT'
+     JOIN content_targets ct ON ct.content_id = c.id
      WHERE ct.target_type = 'USER'
-       AND ct.target_value = $1
+       AND ct.target_value = $1::text
        AND ld.required_for_signup = TRUE
        AND ld.is_archived = FALSE`,
     [user.user_id]
