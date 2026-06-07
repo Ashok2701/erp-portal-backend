@@ -1,258 +1,204 @@
 "use strict";
 // ============================================================
 // inventory.service.js
-// Serves B2B inventory views — all data from SageX3 ERP
-// Views: consignment | available | in-transit | reserved | projected
+// ALL ERP data goes through ERPFactory → SageX3Adapter (or future adapters)
+// Postgres (db) is only used to resolve user context (site, entity code)
 // ============================================================
 
-const db       = require("../config/db");
-const { sql, poolPromise } = require("../config/erp-db");
-const UserModel = require("../models/user.model");
+const ERPFactory  = require("../erp/erp.factory");
+const UserModel   = require("../models/user.model");
 
-// ── resolve the user's site + customer code ──────────────────
+// ── resolve user's site + customer code from Postgres ────────
 async function resolveUserContext(user) {
-  const userId = user.user_id || user.id;
+  const userId  = user.user_id || user.id;
   const userInfo = await UserModel.getUserById(userId);
-  const u = userInfo[0] || {};
+  const u        = userInfo[0] || {};
   return {
-    site:         u.allowedsite || null,
-    customerCode: u.erp_entity_code || null,
-    entityType:   u.erp_entity_type || "customer",
+    user_id:      userId,
+    user_id_str:  String(userId),
+    site:         u.allowedsite        || null,
+    customerCode: u.erp_entity_code    || null,
+    entityType:   u.erp_entity_type    || "customer",
+    role:         user.role            || "Customer",
   };
 }
 
 // ── main dispatcher ──────────────────────────────────────────
 exports.getInventory = async (user, view, filters = {}) => {
-  const ctx = await resolveUserContext(user);
+  const ctx     = await resolveUserContext(user);
+  const adapter = ERPFactory.getERPAdapter();
 
   switch (view) {
-    case "consignment":  return getConsignment(ctx, filters);
-    case "available":    return getAvailable(ctx, filters);
-    case "in-transit":   return getInTransit(ctx, filters);
-    case "reserved":     return getReserved(ctx, filters);
-    case "projected":    return getProjected(ctx, filters);
-    default:             return getConsignment(ctx, filters);
+    case "consignment":  return getConsignment(adapter, ctx, filters);
+    case "available":    return getAvailable(adapter, ctx, filters);
+    case "in-transit":   return getInTransit(adapter, ctx, filters);
+    case "reserved":     return getReserved(adapter, ctx, filters);
+    case "projected":    return getProjected(adapter, ctx, filters);
+    default:             return getConsignment(adapter, ctx, filters);
   }
 };
 
-// ── summary counts for dashboard cards ───────────────────────
+// ── summary counts for dashboard/header cards ─────────────────
 exports.getSummary = async (user) => {
-  const ctx = await resolveUserContext(user);
-  const [consignment, inTransit] = await Promise.all([
-    getConsignment(ctx, {}),
-    getInTransit(ctx, {}),
-  ]);
+  const ctx     = await resolveUserContext(user);
+  const adapter = ERPFactory.getERPAdapter();
 
-  const totalPhysical   = consignment.reduce((s, r) => s + (Number(r.physical_qty)   || 0), 0);
-  const totalAvailable  = consignment.reduce((s, r) => s + (Number(r.available_qty)  || 0), 0);
-  const totalConsumed   = consignment.reduce((s, r) => s + (Number(r.allocated_qty)  || 0), 0);
-  const totalInTransit  = inTransit.length;
-  const lowStock        = consignment.filter(r => {
-    const pct = r.physical_qty > 0 ? (r.available_qty / r.physical_qty) : 1;
+  const stock = await adapter.getStock({
+    site:     ctx.site,
+    customer: ctx.customerCode,
+  });
+
+  const totalPhysical  = stock.reduce((s, r) => s + (Number(r.PHYSICAL_QTY)   || 0), 0);
+  const totalAvailable = stock.reduce((s, r) => s + (Number(r.AVAILABLE_QTY)  || 0), 0);
+  const totalConsumed  = stock.reduce((s, r) => s + (Number(r.ALLOCATED_QTY)  || 0), 0);
+  const lowStockCount  = stock.filter(r => {
+    const pct = r.PHYSICAL_QTY > 0 ? (r.AVAILABLE_QTY / r.PHYSICAL_QTY) : 1;
     return pct < 0.2;
   }).length;
 
+  // In-transit = open deliveries count
+  const deliveries = await adapter.getAllDeliveries({ user: ctx });
+  
   return {
-    total_physical:  totalPhysical,
-    total_available: totalAvailable,
-    total_consumed:  totalConsumed,
-    in_transit_count: totalInTransit,
-    low_stock_count:  lowStock,
+    total_physical:   totalPhysical,
+    total_available:  totalAvailable,
+    total_consumed:   totalConsumed,
+    in_transit_count: deliveries.length,
+    low_stock_count:  lowStockCount,
   };
 };
 
 // ================================================================
-// CONSIGNMENT — physical stock sitting at user's site
-// Matches the screenshot: Product, Location, Physical, Consumed,
-// Available, Status, Order Qty
+// CONSIGNMENT — physical stock at user's site
+// Uses adapter.getStock() → LEWISB.XSTDALN_STOCK (SQL Server / X3)
 // ================================================================
-async function getConsignment(ctx, filters) {
-  const pool    = await poolPromise;
-  const request = pool.request();
+async function getConsignment(adapter, ctx, filters) {
+  const stock = await adapter.getStock({
+    site:     ctx.site,
+    product:  filters.search   || null,
+    category: filters.category || null,
+  });
 
-  let query = `
-    SELECT
-      PRODUCT                                      AS product_code,
-      PROD_DESC                                    AS product_desc,
-      SITE                                         AS site,
-      LOCATION                                     AS location,
-      PHYSICAL_QTY                                 AS physical_qty,
-      ALLOCATED_QTY                                AS allocated_qty,
-      AVAILABLE_QTY                                AS available_qty,
-      UNIT                                         AS unit,
-      CATEGORY                                     AS category,
-      CASE
-        WHEN AVAILABLE_QTY <= 0 THEN 'Out of Stock'
-        WHEN (AVAILABLE_QTY * 1.0 / NULLIF(PHYSICAL_QTY,0)) < 0.2 THEN 'Low'
-        ELSE 'Active'
-      END                                          AS status
-    FROM LEWISB.XSTDALN_STOCK
-    WHERE 1=1
-  `;
-
-  // Filter by user's allowed site
-  if (ctx.site) {
-    query += " AND SITE = @site";
-    request.input("site", sql.VarChar, ctx.site);
-  }
-
-  // Optional search filter
-  if (filters.search) {
-    query += " AND (PRODUCT LIKE @search OR PROD_DESC LIKE @search)";
-    request.input("search", sql.VarChar, `%${filters.search}%`);
-  }
-
-  if (filters.category) {
-    query += " AND CATEGORY = @category";
-    request.input("category", sql.VarChar, filters.category);
-  }
-
-  query += " ORDER BY PROD_DESC ASC";
-
-  const result = await request.query(query);
-  return result.recordset;
-}
-
-// ================================================================
-// AVAILABLE — stock available across all sites (supplier view)
-// ================================================================
-async function getAvailable(ctx, filters) {
-  const pool    = await poolPromise;
-  const request = pool.request();
-
-  let query = `
-    SELECT
-      PRODUCT       AS product_code,
-      PROD_DESC     AS product_desc,
-      SITE          AS site,
-      LOCATION      AS location,
-      AVAILABLE_QTY AS available_qty,
-      UNIT          AS unit,
-      CATEGORY      AS category
-    FROM LEWISB.XSTDALN_STOCK
-    WHERE AVAILABLE_QTY > 0
-  `;
-
-  if (filters.search) {
-    query += " AND (PRODUCT LIKE @search OR PROD_DESC LIKE @search)";
-    request.input("search", sql.VarChar, `%${filters.search}%`);
-  }
-
-  query += " ORDER BY PROD_DESC ASC";
-
-  const result = await request.query(query);
-  return result.recordset;
-}
-
-// ================================================================
-// IN TRANSIT — open deliveries on the way to user's site
-// ================================================================
-async function getInTransit(ctx, filters) {
-  const pool    = await poolPromise;
-  const request = pool.request();
-
-  let query = `
-    SELECT
-      A.SDHNUM_0    AS delivery_no,
-      A.SOHNUM_0    AS order_no,
-      A.STOFCY_0    AS from_site,
-      A.BPDNAM_0    AS delivery_to,
-      A.BPAADD_0    AS address_code,
-      A.DLVDAT_0    AS expected_date,
-      A.SHIDAT_0    AS ship_date,
-      A.DSPTOTQTY_0 AS total_qty,
-      A.BPCORD_0    AS customer_code,
-      C.BPTNAM_0    AS carrier
-    FROM LEWISB.SDELIVERY A
-    LEFT JOIN tbs.LEWISB.BPCARRIER C ON A.BPTNUM_0 = C.BPTNUM_0
-    WHERE A.DLVDAT_0 >= GETDATE()
-  `;
-
-  if (ctx.customerCode) {
-    query += " AND A.BPCORD_0 = @customerCode";
-    request.input("customerCode", sql.NVarChar, ctx.customerCode);
-  }
-
-  if (ctx.site) {
-    query += " AND A.STOFCY_0 = @site";
-    request.input("site", sql.VarChar, ctx.site);
-  }
-
-  query += " ORDER BY A.DLVDAT_0 ASC";
-
-  const result = await request.query(query);
-
-  // Enrich each delivery with its line items
-  const enriched = await Promise.all(result.recordset.map(async (row) => {
-    const items = await pool.request()
-      .input("dlvNo", sql.NVarChar, row.delivery_no)
-      .query(`
-        SELECT
-          A.ITMREF_0  AS product_code,
-          A.ITMDES1_0 AS product_desc,
-          A.QTY_0     AS qty,
-          A.SAU_0     AS unit
-        FROM tbs.LEWISB.SDELIVERYD A
-        WHERE A.SDHNUM_0 = @dlvNo
-      `);
-    return { ...row, items: items.recordset };
+  // Normalise column names + add computed status + allow order qty
+  return stock.map(r => ({
+    product_code:  r.PRODUCT,
+    product_desc:  r.PROD_DESC,
+    site:          r.SITE,
+    location:      r.LOCATION,
+    physical_qty:  Number(r.PHYSICAL_QTY)   || 0,
+    allocated_qty: Number(r.ALLOCATED_QTY)  || 0,
+    available_qty: Number(r.AVAILABLE_QTY)  || 0,
+    unit:          r.UNIT,
+    category:      r.CATEGORY,
+    order_qty:     0,   // editable field — frontend default, submitted via cart
+    status: (() => {
+      const avail = Number(r.AVAILABLE_QTY) || 0;
+      const phys  = Number(r.PHYSICAL_QTY)  || 0;
+      if (avail <= 0) return "Out of Stock";
+      if (phys > 0 && (avail / phys) < 0.2) return "Low";
+      return "Active";
+    })(),
   }));
-
-  return enriched;
 }
 
 // ================================================================
-// RESERVED — allocated / reserved stock at user's site
+// AVAILABLE — stock available across all sites (read-only view)
 // ================================================================
-async function getReserved(ctx, filters) {
-  const pool    = await poolPromise;
-  const request = pool.request();
+async function getAvailable(adapter, ctx, filters) {
+  const stock = await adapter.getStock({
+    product:  filters.search   || null,
+    category: filters.category || null,
+    // No site filter — show all sites
+  });
 
-  let query = `
-    SELECT
-      PRODUCT       AS product_code,
-      PROD_DESC     AS product_desc,
-      SITE          AS site,
-      LOCATION      AS location,
-      ALLOCATED_QTY AS reserved_qty,
-      PHYSICAL_QTY  AS physical_qty,
-      UNIT          AS unit
-    FROM LEWISB.XSTDALN_STOCK
-    WHERE ALLOCATED_QTY > 0
-  `;
-
-  if (ctx.site) {
-    query += " AND SITE = @site";
-    request.input("site", sql.VarChar, ctx.site);
-  }
-
-  query += " ORDER BY PROD_DESC ASC";
-
-  const result = await request.query(query);
-  return result.recordset;
+  return stock
+    .filter(r => Number(r.AVAILABLE_QTY) > 0)
+    .map(r => ({
+      product_code:  r.PRODUCT,
+      product_desc:  r.PROD_DESC,
+      site:          r.SITE,
+      location:      r.LOCATION,
+      available_qty: Number(r.AVAILABLE_QTY) || 0,
+      unit:          r.UNIT,
+      category:      r.CATEGORY,
+    }));
 }
 
 // ================================================================
-// PROJECTED — available + upcoming in-transit
+// IN TRANSIT — open deliveries heading to user's site/customer
+// Uses adapter.getAllDeliveries() → LEWISB.SDELIVERY (SQL Server / X3)
 // ================================================================
-async function getProjected(ctx, filters) {
+async function getInTransit(adapter, ctx, filters) {
+  // getAllDeliveries expects a req-like object with user attached
+  const fakeReq = { user: ctx };
+  const deliveries = await adapter.getAllDeliveries(fakeReq);
+
+  // Normalise column names from X3 raw field names
+  return deliveries.map(d => ({
+    delivery_no:   d.SDHNUM_0,
+    order_no:      d.SOHNUM_0,
+    from_site:     d.STOFCY_0,
+    delivery_to:   d.BPDNAM_0,
+    address_code:  d.BPAADD_0,
+    expected_date: d.DLVDAT_0,
+    ship_date:     d.SHIDAT_0,
+    total_qty:     Number(d.DSPTOTQTY_0) || 0,
+    customer_code: d.BPCORD_0,
+    carrier:       d.BPTNAM_0,
+    items: (d.items || []).map(i => ({
+      product_code: i.ITMREF_0,
+      product_desc: i.ITMDES1_0,
+      qty:          Number(i.QTY_0)     || 0,
+      unit:         i.SAU_0 || i.UNITS,
+      unit_price:   Number(i.NETPRI_0)  || 0,
+      total_amount: Number(i.total_amount) || 0,
+    })),
+  }));
+}
+
+// ================================================================
+// RESERVED — allocated stock at user's site
+// ================================================================
+async function getReserved(adapter, ctx, filters) {
+  const stock = await adapter.getStock({
+    site:     ctx.site,
+    product:  filters.search   || null,
+    category: filters.category || null,
+  });
+
+  return stock
+    .filter(r => Number(r.ALLOCATED_QTY) > 0)
+    .map(r => ({
+      product_code:  r.PRODUCT,
+      product_desc:  r.PROD_DESC,
+      site:          r.SITE,
+      location:      r.LOCATION,
+      reserved_qty:  Number(r.ALLOCATED_QTY) || 0,
+      physical_qty:  Number(r.PHYSICAL_QTY)  || 0,
+      unit:          r.UNIT,
+    }));
+}
+
+// ================================================================
+// PROJECTED — consignment available + incoming in-transit
+// ================================================================
+async function getProjected(adapter, ctx, filters) {
   const [consignment, inTransit] = await Promise.all([
-    getConsignment(ctx, filters),
-    getInTransit(ctx, filters),
+    getConsignment(adapter, ctx, filters),
+    getInTransit(adapter, ctx, filters),
   ]);
 
-  // Build a map of product_code → in-transit qty
+  // Build product → in-transit qty map
   const transitMap = {};
   for (const delivery of inTransit) {
     for (const item of (delivery.items || [])) {
-      transitMap[item.product_code] = (transitMap[item.product_code] || 0) + (Number(item.qty) || 0);
+      transitMap[item.product_code] = (transitMap[item.product_code] || 0) + (item.qty || 0);
     }
   }
 
-  // Merge: available + in-transit
   return consignment.map(row => ({
     ...row,
     in_transit_qty: transitMap[row.product_code] || 0,
-    projected_qty:  (Number(row.available_qty) || 0) + (transitMap[row.product_code] || 0),
+    projected_qty:  row.available_qty + (transitMap[row.product_code] || 0),
   }));
 }

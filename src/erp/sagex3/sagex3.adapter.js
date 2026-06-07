@@ -1146,23 +1146,21 @@ class SageX3Adapter extends BaseERPAdapter {
         LOCATION,
         CATEGORY
       FROM LEWISB.XSTDALN_STOCK
-      WHERE SITE = '00102'
+      WHERE 1=1
     `;
 
     const request =
       pool.request();
 
+    // Dynamic site filter — replaces hardcoded site
+    if (filters.site) {
+      query += ` AND SITE = @site`;
+      request.input("site", sql.VarChar, filters.site);
+    }
+
     if (filters.product) {
-
-      query += `
-        AND PRODUCT = @product
-      `;
-
-      request.input(
-        "product",
-        sql.VarChar,
-        filters.product
-      );
+      query += ` AND (PRODUCT LIKE @product OR PROD_DESC LIKE @product)`;
+      request.input("product", sql.VarChar, `%${filters.product}%`);
     }
 
     if (filters.warehouse) {
