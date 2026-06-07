@@ -45,7 +45,8 @@ app.use("/payment", PaymentRoutes);
 app.use("/content", contentRoutes);
 
 app.use("/dashboard", dashboardRoutes);
-app.use("/inventory",   inventoryRoutes);
+app.use("/inventory",       inventoryRoutes);
+app.use("/erp/inventory",   inventoryRoutes);  // alias — frontend uses /erp/inventory
 app.use("/superadmin",  superadminRoutes);
 
 module.exports = app;
