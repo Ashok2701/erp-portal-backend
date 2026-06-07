@@ -98,6 +98,7 @@ res.json({token,  user: {
                      erp_supplier_code: erpContext.erp_supplier_code,
                      status: user.status || "ACTIVE",
                      allowedsite : user.allowedsite,
+                     portal_mode: user.portal_mode || "b2c",
                      roles
 
                    }

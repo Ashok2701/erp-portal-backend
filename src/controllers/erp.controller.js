@@ -31,27 +31,20 @@ exports.getDashboard = async (req, res) => {
 
 exports.getProducts = async (req, res) => {
   try {
-   // const tenantId = req.user.tenantId;
+   // Auto-inject user's allowedSite if no sites param provided (B2C flow)
+   const UserModel = require("../models/user.model");
+   const userInfo  = await UserModel.getUserById(req.user.user_id || req.user.id);
+   const userSite  = userInfo[0]?.allowedsite || null;
 
-   // const filters = req.query;
+   const sitesParam = req.query.sites
+     ? req.query.sites.split(",").map(s => s.trim())
+     : (userSite ? [userSite] : []);
 
    const filters = {
-
-     customer:
-       req.query.customer || null,
-
-     sites:
-       req.query.sites
-         ? req.query.sites
-             .split(",")
-             .map(s => s.trim())
-         : [],
-
-     category:
-       req.query.category || null,
-
-     quantity:
-       Number(req.query.quantity || 1)
+     customer: req.query.customer || null,
+     sites:    sitesParam,
+     category: req.query.category || null,
+     quantity: Number(req.query.quantity || 1)
    };
 
     const data = await erpService.getProducts(filters);

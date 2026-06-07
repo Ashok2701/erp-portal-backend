@@ -3,22 +3,27 @@ const { v4: uuidv4 } = require("uuid");
 exports.getModulesByUserId = async (userId) => {
 
   const result = await pool.query(
-
     `
     SELECT DISTINCT
        m.module_id, m.module_name, m.route_path, m.icon_name,
+       COALESCE(m.sort_order, 99) AS sort_order,
+       COALESCE(m.portal_mode, 'both') AS portal_mode,
        rm.can_view, rm.can_create, rm.can_edit, rm.can_delete
     FROM user_roles ur
     JOIN role_modules rm ON ur.role_id = rm.role_id
     JOIN modules m ON rm.module_id = m.module_id
+    JOIN users u ON u.user_id = $1
     WHERE ur.user_id = $1
-    AND m.is_active = true
-    AND rm.can_view = true
-    ORDER BY m.module_name
+      AND m.is_active = true
+      AND rm.can_view = true
+      AND (
+        COALESCE(m.portal_mode, 'both') = 'both'
+        OR COALESCE(m.portal_mode, 'both') = COALESCE(u.portal_mode, 'b2c')
+      )
+    ORDER BY COALESCE(m.sort_order, 99), m.module_name
     `,
     [userId]
   );
-
 
   return result.rows;
 };
