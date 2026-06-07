@@ -1,5 +1,53 @@
 const db = require("../config/db");
  const emailService = require("./email.service");
+ const { S3Client, GetObjectCommand } = require("@aws-sdk/client-s3");
+ const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+
+
+
+function getS3Client() {
+  return new S3Client({
+    endpoint: process.env.DO_SPACES_ENDPOINT || process.env.SPACES_ENDPOINT,
+    region: "us-east-1",
+    credentials: {
+      accessKeyId:     process.env.DO_SPACES_KEY    || process.env.SPACES_KEY,
+      secretAccessKey: process.env.DO_SPACES_SECRET || process.env.SPACES_SECRET,
+    },
+    forcePathStyle: false,
+  });
+}
+
+async function enrichWithPresignedUrl(rows) {
+  const bucket = process.env.DO_SPACES_BUCKET || process.env.SPACES_BUCKET || "portaluploaddocs";
+  const s3 = getS3Client();
+
+  return Promise.all(rows.map(async (row) => {
+    if (row.type === "DOCUMENT" && row.file_url) {
+      try {
+        // Extract just the key from the full URL
+        let key = row.file_url;
+        if (key.startsWith("http")) {
+          const u = new URL(key);
+          // pathname = /templates/terms_and_conditions.pdf
+          key = u.pathname.replace(/^\//, ""); // → templates/terms_and_conditions.pdf
+        }
+
+        const cmd = new GetObjectCommand({
+          Bucket: bucket,
+          Key:    key,
+          ResponseContentDisposition: `inline; filename="${row.file_name}"`,
+        });
+
+        const presignedUrl = await getSignedUrl(s3, cmd, { expiresIn: 300 });
+        return { ...row, file_url: presignedUrl };
+      } catch (err) {
+        console.error("Presign error for content:", row.id, err.message);
+        return row; // return original if presign fails
+      }
+    }
+    return row;
+  }));
+}
 
 exports.createContent = async (user, body) => {
   const client = await db.connect();
@@ -105,37 +153,35 @@ exports.getAllContent = async (user) => {
 };
 
 
-
 exports.getFeed = async (user) => {
+  let result;
 
-     // For verification users, only show content targeted at them specifically
-      if (user.status === 'IN_VERIFICATION' || user.status === 'PENDING_APPROVAL') {
-        const result = await db.query(
-          `SELECT c.*, uc.status, uc.viewed_at, uc.signed_at
-           FROM content c
-           JOIN content_targets ct ON c.id = ct.content_id
-           LEFT JOIN user_content uc ON uc.content_id = c.id AND uc.user_id = $1
-           WHERE ct.target_type = 'USER' AND ct.target_value = $1::text
-           ORDER BY c.created_at DESC`,
-          [user.id]
-        );
-        return result.rows;
-      }
+  if (user.status === 'IN_VERIFICATION' || user.status === 'PENDING_APPROVAL') {
+    result = await db.query(
+      `SELECT c.*, uc.status, uc.viewed_at, uc.signed_at
+       FROM content c
+       JOIN content_targets ct ON c.id = ct.content_id
+       LEFT JOIN user_content uc ON uc.content_id = c.id AND uc.user_id = $1
+       WHERE ct.target_type = 'USER' AND ct.target_value = $1::text
+       ORDER BY c.created_at DESC`,
+      [user.id]
+    );
+  } else {
+    result = await db.query(
+      `SELECT c.*, uc.status, uc.viewed_at, uc.signed_at
+       FROM content c
+       LEFT JOIN content_targets ct ON c.id = ct.content_id
+       LEFT JOIN user_content uc ON uc.content_id = c.id AND uc.user_id = $1
+       WHERE ct.target_type = 'ALL'
+         OR (ct.target_type = 'USER' AND ct.target_value = $1::text)
+         OR (ct.target_type = 'ROLE' AND ct.target_value = $2)
+       ORDER BY c.created_at DESC`,
+      [user.id, user.role]
+    );
+  }
 
-const result = await db.query(
-    `SELECT c.*, uc.status, uc.viewed_at, uc.signed_at
-    FROM content c
-    LEFT JOIN content_targets ct ON c.id = ct.content_id
-    LEFT JOIN user_content uc 
-      ON uc.content_id = c.id AND uc.user_id = $1
-    WHERE 
-      ct.target_type = 'ALL'
-      OR (ct.target_type = 'USER' AND ct.target_value = $1::text)
-      OR (ct.target_type = 'ROLE' AND ct.target_value = $2)
-    ORDER BY c.created_at DESC`,
-    [user.id, user.role]
-  );
-  return result.rows;
+  // ← Enrich DOCUMENT rows with pre-signed URLs
+  return enrichWithPresignedUrl(result.rows);
 };
 
 exports.markViewed = async (userId, contentId) => {
@@ -243,6 +289,7 @@ exports.getContentById = async (user, contentId) => {
     throw new Error("Content not found or not authorized");
   }
 
+const enriched = await enrichWithPresignedUrl(result.rows);   
   return result.rows[0];
 };
 
