@@ -111,16 +111,34 @@ res.json({token,  user: {
 
 exports.getMe = async (req , res) => {
    try {
-
-   const {user_id , tenant_id} = req.user;
+   const { user_id, tenant_id, username, role, status,
+           portal_mode, is_super_admin, tenant_slug } = req.user;
 
    const roles = await RoleModel.getRolesByUserId(user_id);
 
+   // Get full user details from DB
+   const userResult = await db.query(
+     `SELECT u.allowedsite, u.erp_entity_type, u.erp_entity_code,
+             u.full_name, u.email
+      FROM users u WHERE u.user_id = $1`, [user_id]
+   );
+   const extra = userResult.rows[0] || {};
+
    res.json({
-      user_id,tenant_id, roles
+      user_id,
+      tenant_id,
+      tenant_slug,
+      username,
+      role,
+      status,
+      portal_mode:    portal_mode    || 'b2c',
+      is_super_admin: is_super_admin || false,
+      allowedsite:    extra.allowedsite,
+      erp_customer_code: extra.erp_entity_code,
+      full_name:      extra.full_name,
+      email:          extra.email,
+      roles
    });
-
-
    }
    catch (err) {
       console.error("GET ME ERROR", err);

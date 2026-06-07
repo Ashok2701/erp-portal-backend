@@ -175,22 +175,32 @@ exports.sendForVerification = async (admin, userId, body) => {
   );
 
   // Send all active legal documents to user's inbox
+  // Get tenant_id from admin user
+  const adminInfo = await db.query(
+    "SELECT tenant_id FROM users WHERE user_id = $1", [admin.user_id]
+  );
+  const tenantId = adminInfo.rows[0]?.tenant_id;
+
   const legalDocs = await db.query(
-      `SELECT * FROM legal_documents
-       WHERE required_for_signup = TRUE
-         AND is_archived = FALSE
-       ORDER BY id`
-    );
+    `SELECT * FROM legal_documents
+     WHERE required_for_signup = TRUE
+       AND is_archived = FALSE
+       AND is_active = TRUE
+       AND (tenant_id = $1 OR tenant_id IS NULL)
+     ORDER BY id`,
+    [tenantId]
+  );
   for (const doc of legalDocs.rows) {
     const contentRes = await db.query(
-      `INSERT INTO content (title, message, type, file_url, file_name, priority, created_by)
-       VALUES ($1, $2, 'DOCUMENT', $3, $4, 'high', $5) RETURNING id`,
+      `INSERT INTO content (title, message, type, file_url, file_name, priority, created_by, tenant_id)
+       VALUES ($1, $2, 'DOCUMENT', $3, $4, 'high', $5, $6) RETURNING id`,
       [
         doc.title,
         doc.description || 'Please review this document carefully and provide your digital signature to acknowledge.',
-        doc.file_url,
+        doc.file_url || doc.spaces_key,
         doc.file_name,
-        admin.user_id
+        admin.user_id,
+        tenantId
       ]
     );
     await db.query(

@@ -311,6 +311,13 @@ exports.remove = async (dropRequestId) => {
 };
 
 exports.generateOrder = async (user, requestIds) => {
+  // Load tenant settings for SOAP config
+  let settings = null;
+  try {
+    const TenantSettings = require("../models/tenantSettings.model");
+    settings = await TenantSettings.getTenantSettings(user.tenant_id);
+  } catch(e) { console.warn("Could not load tenant settings, falling back to env:", e.message); }
+
   try {
     if (!requestIds || requestIds.length === 0) {
       throw new Error("No request IDs provided");
@@ -324,8 +331,8 @@ exports.generateOrder = async (user, requestIds) => {
 
     const callContext = `
 <codeLang xsi:type="xsd:string">ENG</codeLang>
-<poolAlias xsi:type="xsd:string">${process.env.X3_POOL_ALIAS}</poolAlias>
-<poolId xsi:type="xsd:string">${process.env.X3_POOL_ALIAS}</poolId>
+<poolAlias xsi:type="xsd:string">${settings?.x3_pool_alias || process.env.X3_POOL_ALIAS}</poolAlias>
+<poolId xsi:type="xsd:string">${settings?.x3_pool_alias || process.env.X3_POOL_ALIAS}</poolId>
 <requestConfig xsi:type="xsd:string">adxwss.optreturn=XML</requestConfig>
 `;
 
@@ -334,7 +341,7 @@ exports.generateOrder = async (user, requestIds) => {
     // ============================================
 
     const client = await soap.createClientAsync(
-      process.env.X3_WSDL_URL,
+      settings?.x3_wsdl_url || process.env.X3_WSDL_URL,
       {
         attributesKey: "attributes",
         valueKey: "$value",
@@ -354,8 +361,8 @@ exports.generateOrder = async (user, requestIds) => {
 
     client.setSecurity(
       new soap.BasicAuthSecurity(
-        process.env.X3_USERNAME,
-        process.env.X3_PASSWORD,
+        settings?.x3_username || process.env.X3_USERNAME,
+        settings?.x3_password || process.env.X3_PASSWORD,
         ""
       )
     );
@@ -472,7 +479,7 @@ exports.generateOrder = async (user, requestIds) => {
 <FLD NAME="I_XFLAG" TYPE="Integer">0</FLD>
 <FLD NAME="I_XFLG" TYPE="Integer">0</FLD>
 <FLD NAME="I_XVCRNUM" TYPE="Char"></FLD>
-<FLD NAME="I_XFCY" TYPE="Char">${sr.site || process.env.X3_SALES_SITE}</FLD>
+<FLD NAME="I_XFCY" TYPE="Char">${sr.site || settings?.x3_sales_site || process.env.X3_SALES_SITE}</FLD>
 <FLD NAME="I_XBPCNUM" TYPE="Char">${sr.customer_code}</FLD>
 <FLD NAME="I_XADR" TYPE="Char">${sr.address || "10"}</FLD>
 <FLD NAME="I_XORDDAT" TYPE="Date">${orderDate}</FLD>
@@ -482,7 +489,7 @@ exports.generateOrder = async (user, requestIds) => {
 <FLD NAME="I_XMDL" TYPE="Char"></FLD>
 <FLD NAME="I_XCOMMENTS" TYPE="Char">${sr.comments || "SOAP TEST ORDER"}</FLD>
 <FLD NAME="I_XPONUM" TYPE="Char">${sr.po_number || ""}</FLD>
-<FLD NAME="I_XORDTYP" TYPE="Char">${sr.order_type || process.env.X3_ORDER_TYPE}</FLD>
+<FLD NAME="I_XORDTYP" TYPE="Char">${sr.order_type || settings?.x3_order_type || process.env.X3_ORDER_TYPE}</FLD>
 <FLD NAME="I_XUNIQUENO" TYPE="Char">${dropRequestId}</FLD>
 </GRP>
 <TAB ID="GRP2" DIM="500" SIZE="${items.rows.length}">
