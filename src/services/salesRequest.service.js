@@ -100,7 +100,7 @@ exports.create = async (user, body) => {
       customer_code: body.customer_code,
       items: body.items,
       total_amount: totalAmount,
-    }).catch(() => {});
+    }, user?.tenant_id).catch(() => {});
 
     emailService.sendSalesRequestAdminAlert({
       drop_request_id: dropRequestId,
@@ -108,7 +108,7 @@ exports.create = async (user, body) => {
       items: body.items,
       total_amount: totalAmount,
       address: body.address,
-    }).catch(() => {});
+    }, user?.tenant_id).catch(() => {});
 // END OF EMAIL TRIGGER
 
     return {
