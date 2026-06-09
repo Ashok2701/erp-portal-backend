@@ -628,10 +628,17 @@ exports.signDocument = async (user, docId, body, ipAddress, userAgent) => {
   }
 
   // 2. Fetch original PDF bytes from Spaces
-  const obj = await s3.send(new GetObjectCommand({
-    Bucket: process.env.DO_SPACES_BUCKET || "portaluploaddocs",
-    Key: originalKey,
-  }));
+  console.log("[signDocument] Fetching PDF from Spaces:", { bucket: process.env.DO_SPACES_BUCKET || "portaluploaddocs", key: originalKey });
+  let obj;
+  try {
+    obj = await s3.send(new GetObjectCommand({
+      Bucket: process.env.DO_SPACES_BUCKET || "portaluploaddocs",
+      Key: originalKey,
+    }));
+  } catch (s3Err) {
+    console.error("[signDocument] S3 GetObject failed:", s3Err.Code || s3Err.code, s3Err.message);
+    throw new Error(`S3 download failed: ${s3Err.Code || s3Err.code || s3Err.message}`);
+  }
   const pdfBytes = await streamToBuffer(obj.Body);
 
   // 3. Decode signature PNG
@@ -684,7 +691,8 @@ exports.signDocument = async (user, docId, body, ipAddress, userAgent) => {
     (process.env.DO_SPACES_ENDPOINT || "").replace("https://", "")
   }/${signedKey}`;
 
-  // 7. Record in user_signed_documents (create table if needed — see migration below)
+  // 7. Record in user_signed_documents
+  console.log("[signDocument] Saving to DB...");
   await db.query(
     `INSERT INTO user_signed_documents
      (user_id, username, legal_document_id, signed_spaces_key, signed_file_name, signed_file_url, ip_address, user_agent, signed_at)

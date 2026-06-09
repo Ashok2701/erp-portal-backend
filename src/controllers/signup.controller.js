@@ -118,7 +118,10 @@ exports.signDocument = async (req, res) => {
     res.json({ success: true, data });
   } catch (err) {
     console.error("SIGN DOCUMENT ERROR:", err);
-    res.status(500).json({ success: false, message: err.message });
+    // Expose full error detail for debugging (code, name, message)
+    const message = err.message || err.Code || err.code || err.name || "Unknown error";
+    const detail  = err.Code || err.code || err.name || "";
+    res.status(500).json({ success: false, message, detail, stack: process.env.NODE_ENV !== "production" ? err.stack : undefined });
   }
 };
 
