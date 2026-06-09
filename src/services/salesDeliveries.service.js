@@ -1,7 +1,7 @@
 const ERPFactory = require("../erp/erp.factory");
 
 exports.getAll = async (req) => {
-  const adapter = await ERPFactory.getERPAdapterForUser(user);
+  const adapter = await ERPFactory.getERPAdapterForUser(req.user);
   return adapter.getAllDeliveries(req);
 };
 
