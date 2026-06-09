@@ -1,17 +1,23 @@
 const erpService = require("../services/erp.service");
 
 exports.getCustomers = async (req, res) => {
-
-  const customers = await erpService.getCustomers(req.user);
-
-  res.json(customers);
+  try {
+    const customers = await erpService.getCustomers(req.user);
+    res.json({ success: true, data: customers });
+  } catch (err) {
+    console.error("getCustomers:", err.message);
+    res.json({ success: true, data: [], warning: err.message });
+  }
 };
 
 exports.getSuppliers = async (req, res) => {
-
-  const suppliers = await erpService.getSuppliers(req.user);
-
-  res.json(suppliers);
+  try {
+    const suppliers = await erpService.getSuppliers(req.user);
+    res.json({ success: true, data: suppliers });
+  } catch (err) {
+    console.error("getSuppliers:", err.message);
+    res.json({ success: true, data: [], warning: err.message });
+  }
 };
 
 exports.getProducts11 = async (req, res) => {

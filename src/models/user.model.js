@@ -48,17 +48,18 @@ exports.createUser = async (user) => {
 
 exports.getAllUsers = async (tenantId) => {
   const result = await pool.query(
-    `
-   SELECT u.user_id, username,email, full_name,u.allowedsite, u.is_active, contact_number ,whatsapp_number ,country_code ,erp_entity_code ,erp_entity_type, r.role_name
-    FROM users u
-    left join user_roles ur on ur.user_id = u.user_id 
-    left join roles r on r.role_id  = ur.role_id 
-    WHERE tenant_id = $1
-    ORDER BY u.created_at DESC
-    `,
+    `SELECT DISTINCT u.user_id, u.username, u.email, u.full_name,
+            u.allowedsite, u.is_active, u.status, u.portal_mode,
+            u.contact_number, u.whatsapp_number, u.country_code,
+            u.erp_entity_code, u.erp_entity_type, u.created_at,
+            r.role_name, r.role_id
+     FROM users u
+     LEFT JOIN user_roles ur ON ur.user_id = u.user_id
+     LEFT JOIN roles r ON r.role_id = ur.role_id
+     WHERE u.tenant_id = $1
+     ORDER BY u.created_at DESC`,
     [tenantId]
   );
-
   return result.rows;
 };
 

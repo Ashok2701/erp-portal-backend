@@ -69,12 +69,15 @@ exports.createUser = async (req, res) => {
 
 exports.listUsers = async (req, res) => {
   try {
-    const { tenant_id } = req.user;
+    const tenant_id = req.user?.tenant_id;
+    if (!tenant_id) {
+      return res.status(400).json({ message: "tenant_id missing from token" });
+    }
     const users = await UserModel.getAllUsers(tenant_id);
-    res.json({ users });
+    res.json({ success: true, users, data: users });
   } catch (err) {
-    console.error("LIST USERS ERROR:", err);
-    res.status(500).json({ message: "Failed to load users" });
+    console.error("LIST USERS ERROR:", err.message, err.stack);
+    res.status(500).json({ message: "Failed to load users", detail: err.message });
   }
 };
 
