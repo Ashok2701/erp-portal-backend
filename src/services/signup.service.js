@@ -620,12 +620,30 @@ exports.signDocument = async (user, docId, body, ipAddress, userAgent) => {
 
   const s3 = getS3Client();
 
-  // 1. Get original PDF key
-  let originalKey = doc.spaces_key || doc.file_url;
-  if (originalKey && originalKey.startsWith("http")) {
-    const u = new URL(originalKey);
-    originalKey = u.pathname.replace(/^\//, "");
+  // 1. Get original PDF key — handles both spaces_key and legacy file_url
+  let originalKey = doc.spaces_key || doc.file_url || "";
+
+  // Strip bucket name from pathname if present (DO Spaces URLs include bucket in hostname)
+  if (originalKey.startsWith("http")) {
+    try {
+      const u = new URL(originalKey);
+      // DO Spaces: hostname = bucket.region.digitaloceanspaces.com
+      // pathname = /key  (no bucket prefix in path)
+      originalKey = u.pathname.replace(/^\//, "");
+    } catch (e) {
+      // not a URL, use as-is
+    }
   }
+
+  // Strip leading bucket name if it got into the key (e.g. "portaluploaddocs/template/...")
+  const bucket = process.env.DO_SPACES_BUCKET || "portaluploaddocs";
+  if (originalKey.startsWith(bucket + "/")) {
+    originalKey = originalKey.slice(bucket.length + 1);
+  }
+
+  console.log("[signDocument] Resolved original key:", originalKey, "| doc.spaces_key:", doc.spaces_key, "| doc.file_url:", doc.file_url);
+
+  if (!originalKey) throw new Error("Document has no valid storage key (spaces_key and file_url are both empty)");
 
   // 2. Fetch original PDF bytes from Spaces
   console.log("[signDocument] Fetching PDF from Spaces:", { bucket: process.env.DO_SPACES_BUCKET || "portaluploaddocs", key: originalKey });
