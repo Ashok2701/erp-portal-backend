@@ -2,7 +2,7 @@ const service = require("../services/dashboard.service");
 
 exports.getAdminStats = async (req, res) => {
   try {
-    const data = await service.getAdminStats();
+    const data = await service.getAdminStats(req.user);
 
     res.json({ success: true, data });
   } catch (err) {
