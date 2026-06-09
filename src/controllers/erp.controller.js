@@ -47,7 +47,7 @@ exports.getProducts = async (req, res) => {
      quantity: Number(req.query.quantity || 1)
    };
 
-    const data = await erpService.getProducts(filters);
+    const data = await erpService.getProducts(filters, req.user);
 
     res.json({ success: true, data });
   } catch (error) {
