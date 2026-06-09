@@ -173,9 +173,7 @@ exports.getProducts_2 =
 };
 
 
-exports.getProductCategories = async () => {
-//  const connection = await getERPConnection(tenantId);
-
+exports.getProductCategories = async (user) => {
   const adapter = await ERPFactory.getERPAdapterForUser(user);
 
   return adapter.getProductCategories();
