@@ -34,7 +34,8 @@ async function enrichWithPresignedUrl(rows) {
           ResponseContentDisposition: `inline; filename="${row.file_name}"`,
         });
         const presignedUrl = await getSignedUrl(s3, cmd, { expiresIn: 300 });
-        return { ...row, file_url: presignedUrl };
+        // Keep original file_url (storage key) for display, add presigned_url for actual access
+        return { ...row, presigned_url: presignedUrl };
       } catch (err) {
         console.error("Presign error for content:", row.id, err.message);
         return row;
