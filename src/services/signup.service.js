@@ -192,15 +192,16 @@ exports.sendForVerification = async (admin, userId, body) => {
   );
   for (const doc of legalDocs.rows) {
     const contentRes = await db.query(
-      `INSERT INTO content (title, message, type, file_url, file_name, priority, created_by, tenant_id)
-       VALUES ($1, $2, 'DOCUMENT', $3, $4, 'high', $5, $6) RETURNING id`,
+      `INSERT INTO content (title, message, type, file_url, file_name, priority, created_by, tenant_id, legal_document_id)
+       VALUES ($1, $2, 'DOCUMENT', $3, $4, 'high', $5, $6, $7) RETURNING id`,
       [
         doc.title,
         doc.description || 'Please review this document carefully and provide your digital signature to acknowledge.',
         doc.file_url || doc.spaces_key,
         doc.file_name,
         admin.user_id,
-        tenantId
+        tenantId,
+        doc.id
       ]
     );
     await db.query(
