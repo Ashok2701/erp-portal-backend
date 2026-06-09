@@ -83,12 +83,15 @@ async function getConsignment(adapter, ctx, filters) {
   return stock.map(r => ({
     product_code:  r.PRODUCT,
     product_desc:  r.PROD_DESC,
+    description:   r.PROD_DESC,   // alias — frontend normalize uses 'description'
     site:          r.SITE,
     location:      r.LOCATION,
     physical_qty:  Number(r.PHYSICAL_QTY)   || 0,
     allocated_qty: Number(r.ALLOCATED_QTY)  || 0,
+    consumed_qty:  Number(r.ALLOCATED_QTY)  || 0,   // alias — frontend uses 'consumed_qty'
     available_qty: Number(r.AVAILABLE_QTY)  || 0,
     unit:          r.UNIT,
+    uom:           r.UNIT,   // alias — frontend uses 'uom'
     category:      r.CATEGORY,
     order_qty:     0,   // editable field — frontend default, submitted via cart
     status: (() => {
