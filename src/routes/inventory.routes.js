@@ -6,7 +6,8 @@ const auth    = require("../middleware/auth.middleware");
 
 // GET /inventory?view=consignment|available|in-transit|reserved|projected
 // Optional filters: ?search=xxx&category=xxx
-router.get("/",         auth, ctrl.getInventory);
-router.get("/summary",  auth, ctrl.getInventorySummary);
+router.get("/",          auth, ctrl.getInventory);
+router.get("/summary",   auth, ctrl.getInventorySummary);
+router.get("/overview",  auth, ctrl.getInventorySummary); // alias — frontend calls /inventory/overview
 
 module.exports = router;
