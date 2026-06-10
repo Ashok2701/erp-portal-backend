@@ -115,7 +115,8 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
   const dbUser = userResult.rows[0];
 
   // ── KPIs from Postgres ────────────────────────────────────────
-  const [kpiResult, recentOrdersResult, pendingResult, totalAmountResult] = await Promise.all([
+  const [kpiResult, recentOrdersResult, pendingResult, totalAmountResult,
+         salesOrdersResult, dispatchResult, deliveredResult] = await Promise.all([
     db.query(
       `SELECT COUNT(*) AS count FROM sales_requests
        WHERE user_id=$1 AND request_date BETWEEN $2 AND $3`,
@@ -140,6 +141,21 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
     db.query(
       `SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests
        WHERE user_id=$1 AND request_date BETWEEN $2 AND $3`,
+      [dbUser.user_id, dateFrom, dateTo]
+    ),
+    db.query(
+      `SELECT COUNT(*) FROM sales_requests
+       WHERE user_id=$1 AND status='Order Generated' AND request_date BETWEEN $2 AND $3`,
+      [dbUser.user_id, dateFrom, dateTo]
+    ),
+    db.query(
+      `SELECT COUNT(*) FROM sales_requests
+       WHERE user_id=$1 AND status='Delivery Scheduled' AND request_date BETWEEN $2 AND $3`,
+      [dbUser.user_id, dateFrom, dateTo]
+    ),
+    db.query(
+      `SELECT COUNT(*) FROM sales_requests
+       WHERE user_id=$1 AND status='Completed' AND request_date BETWEEN $2 AND $3`,
       [dbUser.user_id, dateFrom, dateTo]
     ),
   ]);
@@ -168,12 +184,12 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
     date_range: { from: dateFrom, to: dateTo },
     recent_orders: recentOrdersResult.rows,
     kpis: {
-      open_requests:          Number(pendingResult.rows[0].count),
-      total_requests:         Number(kpiResult.rows[0].count),
-      total_amount:           Number(totalAmountResult.rows[0].total),
-      sales_orders:           0,
-      orders_in_dispatch:     0,
-      delivered_orders:       0,
+      open_requests:           Number(pendingResult.rows[0].count),
+      total_requests:          Number(kpiResult.rows[0].count),
+      total_amount:            Number(totalAmountResult.rows[0].total),
+      sales_orders:            Number(salesOrdersResult.rows[0].count),
+      orders_in_dispatch:      Number(dispatchResult.rows[0].count),
+      delivered_orders:        Number(deliveredResult.rows[0].count),
       pending_payments_amount: 0,
       currency: "USD",
     },
