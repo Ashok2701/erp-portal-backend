@@ -18,6 +18,7 @@ const documentsRoutes = require("./routes/documents.routes");
 const salesDeliveries = require("./routes/salesDeliveries.routes");
 const inventoryRoutes   = require("./routes/inventory.routes");
 const superadminRoutes  = require("./routes/superadmin.routes");
+const maintenanceRoutes = require("./routes/maintenance.routes");
 const app = express();
 
 app.use(cors());
@@ -47,6 +48,7 @@ app.use("/content", contentRoutes);
 app.use("/dashboard", dashboardRoutes);
 app.use("/inventory",       inventoryRoutes);
 app.use("/erp/inventory",   inventoryRoutes);  // alias — frontend uses /erp/inventory
+app.use("/maintenance",  maintenanceRoutes);
 app.use("/superadmin",  superadminRoutes);
 
 module.exports = app;
