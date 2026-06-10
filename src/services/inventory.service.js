@@ -38,33 +38,82 @@ exports.getInventory = async (user, view, filters = {}) => {
   }
 };
 
-// ── summary counts for dashboard/header cards ─────────────────
+// ── summary counts for overview dashboard ─────────────────────
 exports.getSummary = async (user) => {
+  const db      = require("../config/db");
   const ctx     = await resolveUserContext(user);
   const adapter = await ERPFactory.getERPAdapterForUser(user);
 
-  const stock = await adapter.getStock({
-    site:     ctx.site,
-    customer: ctx.customerCode,
-  });
+  // Load all stock from ERP
+  const stock = await adapter.getStock({ site: ctx.site }).catch(() => []);
 
-  const totalPhysical  = stock.reduce((s, r) => s + (Number(r.PHYSICAL_QTY)   || 0), 0);
-  const totalAvailable = stock.reduce((s, r) => s + (Number(r.AVAILABLE_QTY)  || 0), 0);
-  const totalConsumed  = stock.reduce((s, r) => s + (Number(r.ALLOCATED_QTY)  || 0), 0);
-  const lowStockCount  = stock.filter(r => {
-    const pct = r.PHYSICAL_QTY > 0 ? (r.AVAILABLE_QTY / r.PHYSICAL_QTY) : 1;
-    return pct < 0.2;
-  }).length;
+  // KPI aggregates
+  const available   = stock.reduce((s, r) => s + (Number(r.AVAILABLE_QTY) || 0), 0);
+  const consignment = stock.reduce((s, r) => s + (Number(r.PHYSICAL_QTY)  || 0), 0);
+  const reserved    = stock.reduce((s, r) => s + (Number(r.ALLOCATED_QTY) || 0), 0);
 
-  // In-transit = open deliveries count
-  const deliveries = await adapter.getAllDeliveries({ user: ctx });
-  
+  // In-transit — count from open deliveries
+  const deliveries   = await adapter.getAllDeliveries({ user: ctx }).catch(() => []);
+  const inTransitQty = deliveries.reduce((s, d) =>
+    s + (d.items || []).reduce((ss, i) => ss + (Number(i.QTY_0 || i.qty) || 0), 0), 0);
+
+  // Projected = available + in-transit
+  const projected = available + inTransitQty;
+
+  // Pending requests from Postgres
+  const pendingRes = await db.query(
+    "SELECT COUNT(*) FROM sales_requests WHERE status = 'CREATED' AND user_id = $1",
+    [ctx.user_id]
+  ).catch(() => ({ rows: [{ count: 0 }] }));
+  const pendingRequests = Number(pendingRes.rows[0]?.count || 0);
+
+  // by_type — pie chart data
+  const by_type = [
+    { type: "consignment", qty: consignment },
+    { type: "available",   qty: available   },
+    { type: "reserved",    qty: reserved    },
+    { type: "in_transit",  qty: inTransitQty},
+    { type: "projected",   qty: projected   },
+  ].filter(t => t.qty > 0);
+
+  // by_location — bar chart: group stock by LOCATION field
+  const locationMap = {};
+  for (const r of stock) {
+    const loc = r.LOCATION || r.SITE || "Unknown";
+    locationMap[loc] = (locationMap[loc] || 0) + (Number(r.PHYSICAL_QTY) || 0);
+  }
+  const by_location = Object.entries(locationMap)
+    .map(([location, qty]) => ({ location, qty }))
+    .sort((a, b) => b.qty - a.qty)
+    .slice(0, 10);
+
+  // upcoming — line chart: group in-transit by expected date
+  const dateMap = {};
+  for (const d of deliveries) {
+    const date = d.DLVDAT_0
+      ? new Date(d.DLVDAT_0).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+      : "TBD";
+    const qty = (d.items || []).reduce((s, i) => s + (Number(i.QTY_0 || i.qty) || 0), 0);
+    dateMap[date] = (dateMap[date] || 0) + qty;
+  }
+  const upcoming = Object.entries(dateMap)
+    .map(([date, qty]) => ({ date, qty, source: "In Transit" }))
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(0, 10);
+
   return {
-    total_physical:   totalPhysical,
-    total_available:  totalAvailable,
-    total_consumed:   totalConsumed,
-    in_transit_count: deliveries.length,
-    low_stock_count:  lowStockCount,
+    kpis: {
+      available,
+      consignment,
+      reserved,
+      in_transit:       inTransitQty,
+      projected,
+      network:          0,   // not yet available from X3
+      pending_requests: pendingRequests,
+    },
+    by_type,
+    by_location,
+    upcoming,
   };
 };
 
