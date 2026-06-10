@@ -2,8 +2,19 @@ const erpService = require("../services/erp.service");
 
 exports.getCustomers = async (req, res) => {
   try {
-    const customers = await erpService.getCustomers(req.user);
-    res.json({ success: true, data: customers });
+    // filter_mode: 'email' | 'domain' | 'all'
+    // user_email: email of the portal user being linked
+    const mode  = req.query.filter_mode || 'all';
+    const email = req.query.user_email  || '';
+    const domain = email.includes('@') ? email.split('@')[1] : '';
+
+    const filters = {};
+    if (mode === 'email'  && email)  filters.emailFilter  = email;
+    if (mode === 'domain' && domain) filters.domainFilter = domain;
+    // mode === 'all' → no filter (existing behaviour)
+
+    const customers = await erpService.getCustomers(req.user, filters);
+    res.json({ success: true, data: customers, meta: { mode, email, domain } });
   } catch (err) {
     console.error("getCustomers:", err.message);
     res.json({ success: true, data: [], warning: err.message });

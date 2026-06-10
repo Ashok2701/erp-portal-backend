@@ -60,8 +60,8 @@ class SageX3Adapter extends BaseERPAdapter {
     return null;
   }
 
-  async getCustomers() {
-    return this.getCustomersFromDB();
+  async getCustomers(filters = {}) {
+    return this.getCustomersFromDB(filters);
   }
 
   async getSuppliers() {
@@ -301,19 +301,42 @@ class SageX3Adapter extends BaseERPAdapter {
   // CUSTOMERS
   // =====================================================
 
-  async getCustomersFromDB() {
-
+  async getCustomersFromDB({ emailFilter, domainFilter } = {}) {
     const pool = await this.poolPromise;
+    const { sql } = require("mssql");
 
-    const result =
-      await pool.request().query(`
-        SELECT
-          BPCNUM_0 AS customer_code,
-          BPCNAM_0 AS customer_name
-        FROM LEWISB.BPCUSTOMER
-      `);
+    let query = `
+      SELECT
+        BPCNUM_0 AS customer_code,
+        BPCNAM_0 AS customer_name,
+        ISNULL(WEB_0, '')   AS web,
+        ISNULL(CTC_0, '')   AS contact_ref
+      FROM LEWISB.BPCUSTOMER
+      WHERE 1=1
+    `;
 
-    return result.recordset;
+    const req = pool.request();
+
+    // Tier 1 — exact email match on WEB_0
+    if (emailFilter) {
+      query += ` AND LOWER(WEB_0) = LOWER(@email)`;
+      req.input("email", sql.VarChar, emailFilter);
+    }
+    // Tier 2 — same domain match on WEB_0
+    else if (domainFilter) {
+      query += ` AND LOWER(WEB_0) LIKE @domain`;
+      req.input("domain", sql.VarChar, `%@${domainFilter.toLowerCase().replace(/^@/, '')}`);
+    }
+
+    query += ` ORDER BY BPCNAM_0`;
+    const result = await req.query(query);
+
+    return result.recordset.map(r => ({
+      customer_code: r.customer_code,
+      customer_name: r.customer_name,
+      email:         r.web || null,
+      contact_ref:   r.contact_ref || null,
+    }));
   }
 
   // =====================================================

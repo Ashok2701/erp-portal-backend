@@ -18,11 +18,9 @@ exports.createSalesOrder = async (salesRequest) => {
 };
 
 
-exports.getCustomers = async (user) => {
-
-   const adapter = await ERPFactory.getERPAdapterForUser(user);
-
-   return adapter.getCustomers();
+exports.getCustomers = async (user, filters = {}) => {
+  const adapter = await ERPFactory.getERPAdapterForUser(user);
+  return adapter.getCustomers(filters);
 };
 
 exports.getSuppliers = async (user) => {
