@@ -1,200 +1,289 @@
 "use strict";
-const db         = require("../config/db");
+const db      = require("../config/db");
 const ERPFactory = require("../erp/erp.factory");
 
 // ================================================================
-// ADMIN STATS
+// ADMIN DASHBOARD — full data for AdminDashboard.jsx
 // ================================================================
 exports.getAdminStats = async (user) => {
+  const tenant_id = user?.tenant_id;
 
-  // ── Postgres stats ───────────────────────────────────────────
-  const [usersTotal, usersActive, usersByRole,
-         modules, roles, roleModules,
-         ordersTotal, ordersToday, ordersPending, ordersByStatus] = await Promise.all([
-    db.query("SELECT COUNT(*) FROM users"),
-    db.query("SELECT COUNT(*) FROM users WHERE is_active = true"),
+  const [
+    usersTotal, usersActive, usersByRole,
+    modules, roles, roleModules,
+    ordersTotal, ordersToday, ordersPending, ordersByStatus,
+    newSignups7d, pendingVerification, pendingApproval,
+    recentSignups, recentOrders, recentSigned,
+    unreadMessages
+  ] = await Promise.all([
+    db.query("SELECT COUNT(*) FROM users WHERE tenant_id=$1", [tenant_id]),
+    db.query("SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND is_active=true", [tenant_id]),
     db.query(`SELECT r.role_name AS role, COUNT(u.user_id) AS count
               FROM users u
-              JOIN user_roles ur ON u.user_id = ur.user_id
-              JOIN roles r ON ur.role_id = r.role_id
-              GROUP BY r.role_name`),
-    db.query(`SELECT COUNT(*) AS total,
-                     COUNT(*) FILTER (WHERE is_active=true) AS active
-              FROM modules`),
-    db.query(`SELECT COUNT(*) AS total,
-                     COUNT(*) FILTER (WHERE is_active=true) AS active
-              FROM roles`),
+              JOIN user_roles ur ON u.user_id=ur.user_id
+              JOIN roles r ON ur.role_id=r.role_id
+              WHERE u.tenant_id=$1 GROUP BY r.role_name`, [tenant_id]),
+    db.query(`SELECT COUNT(*) AS total, COUNT(*) FILTER(WHERE is_active=true) AS active FROM modules`),
+    db.query(`SELECT COUNT(*) AS total, COUNT(*) FILTER(WHERE is_active=true) AS active FROM roles`),
     db.query("SELECT COUNT(*) FROM role_modules"),
-    db.query("SELECT COUNT(*) FROM sales_requests"),
-    db.query("SELECT COUNT(*) FROM sales_requests WHERE DATE(created_time) = CURRENT_DATE"),
-    db.query("SELECT COUNT(*) FROM sales_requests WHERE status='CREATED'"),
-    db.query("SELECT status, COUNT(*) FROM sales_requests GROUP BY status"),
+    db.query("SELECT COUNT(*) FROM sales_requests WHERE user_id IN (SELECT user_id FROM users WHERE tenant_id=$1)", [tenant_id]),
+    db.query("SELECT COUNT(*) FROM sales_requests WHERE DATE(created_time)=CURRENT_DATE AND user_id IN (SELECT user_id FROM users WHERE tenant_id=$1)", [tenant_id]),
+    db.query("SELECT COUNT(*) FROM sales_requests WHERE status='CREATED' AND user_id IN (SELECT user_id FROM users WHERE tenant_id=$1)", [tenant_id]),
+    db.query(`SELECT status, COUNT(*) FROM sales_requests
+              WHERE user_id IN (SELECT user_id FROM users WHERE tenant_id=$1) GROUP BY status`, [tenant_id]),
+    // Activity feed data
+    db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND created_at >= NOW()-INTERVAL '7 days'`, [tenant_id]),
+    db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='IN_VERIFICATION'`, [tenant_id]),
+    db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='PENDING_APPROVAL'`, [tenant_id]),
+    // Recent signups (last 10)
+    db.query(`SELECT username, full_name, email, status, created_at
+              FROM users WHERE tenant_id=$1
+              ORDER BY created_at DESC LIMIT 10`, [tenant_id]),
+    // Recent orders (last 10)
+    db.query(`SELECT sr.drop_request_id, u.username, u.full_name,
+                     sr.total_amount, sr.status, sr.created_time
+              FROM sales_requests sr
+              JOIN users u ON u.user_id=sr.user_id
+              WHERE u.tenant_id=$1
+              ORDER BY sr.created_time DESC LIMIT 10`, [tenant_id]),
+    // Recent document signings
+    db.query(`SELECT usd.signed_at, usd.username, ld.title AS doc_title
+              FROM user_signed_documents usd
+              JOIN legal_documents ld ON ld.id=usd.legal_document_id
+              WHERE ld.tenant_id=$1
+              ORDER BY usd.signed_at DESC LIMIT 10`, [tenant_id]),
+    // Unread/unprocessed content messages
+    db.query(`SELECT COUNT(*) FROM content
+              WHERE tenant_id=$1 AND type='MESSAGE'
+              AND created_at >= NOW()-INTERVAL '7 days'`, [tenant_id]),
   ]);
 
-  // ── ERP stats (via adapter — uses tenant settings) ───────────
-  let products = [], categories = [], stock = [];
+  // ERP stats (non-blocking)
+  let products = [], categories = [];
   try {
     const adapter = await ERPFactory.getERPAdapterForUser(user);
-    [products, categories, stock] = await Promise.all([
+    [products, categories] = await Promise.all([
       adapter.getProducts({}).catch(() => []),
       adapter.getProductCategories().catch(() => []),
-      adapter.getStock({}).catch(() => []),
     ]);
-  } catch (err) {
-    console.warn("Dashboard ERP stats unavailable:", err.message);
-  }
+  } catch (_) {}
 
-  const lowStock = stock.filter(s =>
-    Number(s.AVAILABLE_QTY || s.available_qty || 0) < 10
-  );
+  // Build unified activity feed sorted by time
+  const activityFeed = [];
+  for (const r of recentSignups.rows.slice(0, 5)) {
+    activityFeed.push({ type: "signup", icon: "user-plus", color: "blue",
+      message: `${r.full_name || r.username} requested access`,
+      sub: r.status, time: r.created_at });
+  }
+  for (const r of recentOrders.rows.slice(0, 5)) {
+    activityFeed.push({ type: "order", icon: "shopping-cart", color: "emerald",
+      message: `New order from ${r.full_name || r.username}`,
+      sub: `$${Number(r.total_amount||0).toFixed(2)}`, time: r.created_time });
+  }
+  for (const r of recentSigned.rows.slice(0, 5)) {
+    activityFeed.push({ type: "signed", icon: "pen", color: "violet",
+      message: `${r.username} signed "${r.doc_title}"`,
+      sub: "Document signed", time: r.signed_at });
+  }
+  activityFeed.sort((a,b) => new Date(b.time) - new Date(a.time));
+
+  // User lifecycle funnel
+  const [fCreated, fVerif, fPendApproval, fActive, fRejected] = await Promise.all([
+    db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='CREATED'`, [tenant_id]),
+    db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='IN_VERIFICATION'`, [tenant_id]),
+    db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='PENDING_APPROVAL'`, [tenant_id]),
+    db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='ACTIVE'`, [tenant_id]),
+    db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='REJECTED'`, [tenant_id]),
+  ]);
 
   return {
     users: {
       total:   Number(usersTotal.rows[0].count),
       active:  Number(usersActive.rows[0].count),
-      by_role: Object.fromEntries(
-        usersByRole.rows.map(r => [r.role, Number(r.count)])
-      ),
+      by_role: Object.fromEntries(usersByRole.rows.map(r => [r.role, Number(r.count)])),
+      new_this_week: Number(newSignups7d.rows[0].count),
     },
-    modules: {
-      total:  Number(modules.rows[0].total),
-      active: Number(modules.rows[0].active),
-    },
-    roles: {
-      total:  Number(roles.rows[0].total),
-      active: Number(roles.rows[0].active),
-    },
-    role_modules: { total: Number(roleModules.rows[0].count) },
-    products: {
-      total:       products.length,
-      categories:  categories.length,
-      with_images: products.filter(p => p.PROD_IMG || p.prod_img).length,
-      low_stock:   lowStock.length,
-    },
+    modules:     { total: Number(modules.rows[0].total), active: Number(modules.rows[0].active) },
+    roles:       { total: Number(roles.rows[0].total),   active: Number(roles.rows[0].active)   },
+    role_modules:{ total: Number(roleModules.rows[0].count) },
+    products:    { total: products.length, categories: categories.length },
     orders: {
       total:   Number(ordersTotal.rows[0].count),
       today:   Number(ordersToday.rows[0].count),
       pending: Number(ordersPending.rows[0].count),
-      by_status: Object.fromEntries(
-        ordersByStatus.rows.map(r => [r.status, Number(r.count)])
-      ),
+      by_status: Object.fromEntries(ordersByStatus.rows.map(r => [r.status, Number(r.count)])),
     },
+    pending_actions: {
+      awaiting_verification: Number(pendingVerification.rows[0].count),
+      pending_approval:      Number(pendingApproval.rows[0].count),
+      unprocessed_orders:    Number(ordersPending.rows[0].count),
+      new_messages:          Number(unreadMessages.rows[0].count),
+    },
+    lifecycle_funnel: [
+      { stage: "Signed Up",        count: Number(fCreated.rows[0].count),     color: "blue"   },
+      { stage: "Docs Sent",        count: Number(fVerif.rows[0].count),       color: "amber"  },
+      { stage: "Docs Signed",      count: Number(fPendApproval.rows[0].count),color: "violet" },
+      { stage: "Active",           count: Number(fActive.rows[0].count),      color: "emerald"},
+      { stage: "Rejected",         count: Number(fRejected.rows[0].count),    color: "rose"   },
+    ],
+    activity_feed: activityFeed.slice(0, 15),
   };
 };
 
 // ================================================================
-// CUSTOMER DASHBOARD
+// CUSTOMER STATS  — /dashboard/stats  (Dashboard.jsx)
+// ================================================================
+exports.getCustomerStats = async (user) => {
+  const user_id = user?.user_id;
+  const [ordersRes, revenueRes] = await Promise.all([
+    db.query(`SELECT status, COUNT(*) as count FROM sales_requests
+              WHERE user_id=$1 GROUP BY status`, [user_id]),
+    db.query(`SELECT COALESCE(SUM(total_amount),0) as total FROM sales_requests WHERE user_id=$1`, [user_id]),
+  ]);
+  const byStatus = {};
+  for (const row of ordersRes.rows) byStatus[(row.status||"").toLowerCase()] = Number(row.count);
+  const total_orders  = ordersRes.rows.reduce((s,r) => s + Number(r.count), 0);
+  return {
+    success: true,
+    data: {
+      total_orders,
+      pending_orders:    byStatus["created"]            || 0,
+      confirmed_orders:  byStatus["order generated"]    || 0,
+      scheduled_orders:  byStatus["delivery scheduled"] || 0,
+      delivered_orders:  byStatus["completed"]          || 0,
+      today_ready:       (byStatus["order generated"]||0) + (byStatus["delivery scheduled"]||0),
+      total_revenue:     Number(revenueRes.rows[0]?.total || 0),
+    }
+  };
+};
+
+// ================================================================
+// CUSTOMER DASHBOARD  — /dashboard/customer  (DashboardKPIPanel)
 // ================================================================
 exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
-
-  // ── Resolve date range ────────────────────────────────────────
   const now = new Date();
   let dateFrom = from, dateTo = to;
   if (!dateFrom || !dateTo) {
-    if (preset === "week") {
-      dateFrom = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 7).toISOString();
-    } else if (preset === "year") {
-      dateFrom = new Date(now.getFullYear(), 0, 1).toISOString();
+    if (preset === "this_week") {
+      const day = now.getDay() || 7;
+      const mon = new Date(now); mon.setDate(now.getDate() - (day-1));
+      dateFrom = mon.toISOString().slice(0,10);
+      dateTo   = now.toISOString().slice(0,10);
+    } else if (preset === "this_month") {
+      dateFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
+      dateTo   = now.toISOString().slice(0,10);
     } else {
-      // default: current month
-      dateFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+      // today
+      dateFrom = dateTo = now.toISOString().slice(0,10);
     }
-    dateTo = now.toISOString();
   }
 
-  // ── User info from Postgres ───────────────────────────────────
-  const resolvedUser = user || {};
-  const resolvedUsername = username || resolvedUser.username;
-
-  const userResult = await db.query(
-    `SELECT username, full_name, allowedsite, user_id, erp_entity_code
-     FROM users WHERE username = $1`,
-    [resolvedUsername]
+  const resolvedUsername = username || user?.username;
+  const userRes = await db.query(
+    `SELECT user_id, username, full_name, allowedsite, erp_entity_code
+     FROM users WHERE username=$1`, [resolvedUsername]
   );
-  if (!userResult.rows.length) throw new Error("User not found");
-  const dbUser = userResult.rows[0];
+  if (!userRes.rows.length) throw new Error("User not found");
+  const dbUser = userRes.rows[0];
+  const uid    = dbUser.user_id;
 
-  // ── KPIs from Postgres ────────────────────────────────────────
-  const [kpiResult, recentOrdersResult, pendingResult, totalAmountResult,
-         salesOrdersResult, dispatchResult, deliveredResult] = await Promise.all([
-    db.query(
-      `SELECT COUNT(*) AS count FROM sales_requests
-       WHERE user_id=$1 AND request_date BETWEEN $2 AND $3`,
-      [dbUser.user_id, dateFrom, dateTo]
-    ),
-    db.query(
-      `SELECT sr.drop_request_id AS request_no,
-              DATE(sr.request_date) AS date,
-              (SELECT COUNT(*) FROM sales_request_items sri
-               WHERE sri.drop_request_id = sr.drop_request_id) AS products_count,
-              sr.status, sr.erp_order_no AS so_number,
-              sr.request_date AS delivery_date, sr.total_amount AS amount
-       FROM sales_requests sr
-       WHERE sr.user_id=$1 AND sr.request_date BETWEEN $2 AND $3
-       ORDER BY sr.request_date DESC LIMIT 10`,
-      [dbUser.user_id, dateFrom, dateTo]
-    ),
-    db.query(
-      `SELECT COUNT(*) FROM sales_requests WHERE user_id=$1 AND status='CREATED'`,
-      [dbUser.user_id]
-    ),
-    db.query(
-      `SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests
-       WHERE user_id=$1 AND request_date BETWEEN $2 AND $3`,
-      [dbUser.user_id, dateFrom, dateTo]
-    ),
-    db.query(
-      `SELECT COUNT(*) FROM sales_requests
-       WHERE user_id=$1 AND status='Order Generated' AND request_date BETWEEN $2 AND $3`,
-      [dbUser.user_id, dateFrom, dateTo]
-    ),
-    db.query(
-      `SELECT COUNT(*) FROM sales_requests
-       WHERE user_id=$1 AND status='Delivery Scheduled' AND request_date BETWEEN $2 AND $3`,
-      [dbUser.user_id, dateFrom, dateTo]
-    ),
-    db.query(
-      `SELECT COUNT(*) FROM sales_requests
-       WHERE user_id=$1 AND status='Completed' AND request_date BETWEEN $2 AND $3`,
-      [dbUser.user_id, dateFrom, dateTo]
-    ),
+  const fromTs = `${dateFrom} 00:00:00`;
+  const toTs   = `${dateTo}   23:59:59`;
+
+  const [
+    openReq, salesOrders, dispatch, delivered,
+    pendingPayments, totalAmount,
+    recentOrders, pipeline,
+    unsignedDocs, unreadContent,
+    approvalStatus
+  ] = await Promise.all([
+    // KPIs
+    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1 AND status='CREATED'`, [uid]),
+    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1 AND status='Order Generated' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
+    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1 AND status='Delivery Scheduled' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
+    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1 AND status='Completed' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
+    db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1 AND status='CREATED'`, [uid]),
+    db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1 AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
+    // Recent orders
+    db.query(`SELECT sr.drop_request_id AS request_no, DATE(sr.request_date) AS date,
+                     (SELECT COUNT(*) FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id) AS products_count,
+                     sr.status, sr.erp_order_no AS so_number,
+                     sr.request_date AS delivery_date, sr.total_amount AS amount
+              FROM sales_requests sr WHERE sr.user_id=$1
+              ORDER BY sr.request_date DESC LIMIT 10`, [uid]),
+    // Pipeline counts ALL time
+    db.query(`SELECT status, COUNT(*) FROM sales_requests WHERE user_id=$1 GROUP BY status`, [uid]),
+    // Unsigned legal documents
+    db.query(`SELECT c.id AS content_id, c.title, ld.id AS legal_doc_id
+              FROM content c
+              JOIN legal_documents ld ON ld.id=c.legal_document_id
+              WHERE c.type='DOCUMENT'
+              AND EXISTS (SELECT 1 FROM content_targets ct WHERE ct.content_id=c.id AND (ct.target_value=$1::text OR ct.target_value=( SELECT role_id::text FROM user_roles WHERE user_id=$1 LIMIT 1) OR ct.target_type='ALL'))
+              AND NOT EXISTS (SELECT 1 FROM user_signed_documents usd WHERE usd.user_id=$1 AND usd.legal_document_id=ld.id)
+              LIMIT 5`, [uid]),
+    // Recent content (offers, announcements, messages) targeted to this user
+    db.query(`SELECT c.id, c.title, c.type, c.message, c.priority, c.created_at
+              FROM content c
+              JOIN content_targets ct ON ct.content_id=c.id
+              WHERE c.type IN ('OFFER','ANNOUNCEMENT','MESSAGE')
+              AND (ct.target_value=$1::text OR ct.target_type='ALL'
+                   OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$1))
+              AND c.created_at >= NOW() - INTERVAL '30 days'
+              ORDER BY c.created_at DESC LIMIT 8`, [uid]),
+    // Account status
+    db.query(`SELECT status FROM users WHERE user_id=$1`, [uid]),
   ]);
 
-  // ── Site info from ERP (via adapter) ─────────────────────────
-  let siteName = "";
-  try {
-    const erpUser = user || { tenant_id: null, user_id: dbUser.user_id };
-    const adapter = await ERPFactory.getERPAdapterForUser(erpUser);
-    const pool    = await adapter.poolPromise;
-    const { sql } = require("mssql");
-    const siteResult = await pool.request()
-      .input("site", sql.VarChar, dbUser.allowedsite)
-      .query(`SELECT FCYNAM_0 FROM LEWISB.XTMSUSRFCY WHERE XFCY_0 = @site`);
-    siteName = siteResult.recordset[0]?.FCYNAM_0 || "";
-  } catch (err) {
-    console.warn("Dashboard site lookup failed:", err.message);
+  // Build pipeline stages
+  const statusMap = {};
+  for (const r of pipeline.rows) statusMap[r.status] = Number(r.count);
+  const pipelineStages = [
+    { stage: "request_raised", label: "Request Raised",       count: statusMap["CREATED"] || 0 },
+    { stage: "under_review",   label: "Under Review",         count: statusMap["Processing"] || 0 },
+    { stage: "so_created",     label: "Approved / SO Created",count: statusMap["Order Generated"] || 0 },
+    { stage: "in_dispatch",    label: "In Dispatch",          count: statusMap["Delivery Scheduled"] || 0 },
+    { stage: "delivered",      label: "Delivered",            count: statusMap["Completed"] || 0 },
+  ];
+
+  // Build pending actions
+  const pendingActions = [];
+  const unsignedCount = unsignedDocs.rows.length;
+  if (unsignedCount > 0)
+    pendingActions.push({ key: "unsigned_docs", label: "Documents to Sign", count: unsignedCount, icon: "pen", path: "/inbox" });
+  if (Number(openReq.rows[0].count) > 0)
+    pendingActions.push({ key: "open_requests", label: "Open Order Requests", count: Number(openReq.rows[0].count), icon: "clock", path: "/sales-requests" });
+  if (Number(pendingPayments.rows[0].total) > 0)
+    pendingActions.push({ key: "payments_due", label: "Payments Due", count: null, icon: "credit-card", path: "/payments",
+      amount: Number(pendingPayments.rows[0].total) });
+
+  // Build notifications from unread content
+  const notifications = [];
+  for (const row of unsignedDocs.rows) {
+    notifications.push({ id: `doc-${row.content_id}`, type: "doc_to_sign",
+      message: `Sign required: "${row.title}"`, timestamp: null, path: `/inbox/${row.content_id}`, urgent: true });
+  }
+  for (const row of unreadContent.rows) {
+    const typeMap = { OFFER: "special_offer", ANNOUNCEMENT: "announcement", MESSAGE: "message_received" };
+    notifications.push({ id: `c-${row.id}`, type: typeMap[row.type] || "announcement",
+      message: row.title, timestamp: row.created_at, path: `/inbox/${row.id}`, urgent: row.priority === "high" });
   }
 
   return {
-    user: {
-      username:     dbUser.username,
-      display_name: dbUser.full_name,
-      company_name: siteName,
-    },
+    user: { username: dbUser.username, display_name: dbUser.full_name, site: dbUser.allowedsite },
+    account_status: approvalStatus.rows[0]?.status,
     date_range: { from: dateFrom, to: dateTo },
-    recent_orders: recentOrdersResult.rows,
     kpis: {
-      open_requests:           Number(pendingResult.rows[0].count),
-      total_requests:          Number(kpiResult.rows[0].count),
-      total_amount:            Number(totalAmountResult.rows[0].total),
-      sales_orders:            Number(salesOrdersResult.rows[0].count),
-      orders_in_dispatch:      Number(dispatchResult.rows[0].count),
-      delivered_orders:        Number(deliveredResult.rows[0].count),
-      pending_payments_amount: 0,
+      open_requests:           Number(openReq.rows[0].count),
+      sales_orders:            Number(salesOrders.rows[0].count),
+      orders_in_dispatch:      Number(dispatch.rows[0].count),
+      delivered_orders:        Number(delivered.rows[0].count),
+      pending_payments_amount: Number(pendingPayments.rows[0].total),
+      total_amount:            Number(totalAmount.rows[0].total),
       currency: "USD",
     },
-    pipeline:        [],
-    pending_actions: [],
-    notifications:   [],
+    pipeline: pipelineStages,
+    pending_actions: pendingActions,
+    notifications,
+    recent_orders: recentOrders.rows,
   };
 };
