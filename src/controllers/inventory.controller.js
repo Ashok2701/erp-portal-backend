@@ -3,7 +3,9 @@ const inventoryService = require("../services/inventory.service");
 
 exports.getInventory = async (req, res) => {
   try {
-    const view = req.query.view || "consignment";
+    // /inventory/availability → default view=available
+    const pathDefault = req.path === '/availability' ? 'available' : 'consignment';
+    const view = req.query.view || pathDefault;
     const data = await inventoryService.getInventory(req.user, view, req.query);
     res.json({ success: true, data });
   } catch (err) {
