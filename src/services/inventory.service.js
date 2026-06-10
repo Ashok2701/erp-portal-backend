@@ -158,21 +158,33 @@ async function getConsignment(adapter, ctx, filters) {
 // ================================================================
 async function getAvailable(adapter, ctx, filters) {
   const stock = await adapter.getStock({
+    site:     ctx.site,
     product:  filters.search   || null,
     category: filters.category || null,
-    // No site filter — show all sites
   });
 
   return stock
     .filter(r => Number(r.AVAILABLE_QTY) > 0)
     .map(r => ({
-      product_code:  r.PRODUCT,
-      product_desc:  r.PROD_DESC,
-      site:          r.SITE,
-      location:      r.LOCATION,
-      available_qty: Number(r.AVAILABLE_QTY) || 0,
-      unit:          r.UNIT,
-      category:      r.CATEGORY,
+      // Standard fields
+      product_code:    r.PRODUCT,
+      product_name:    r.PROD_DESC,
+      description:     r.PROD_DESC,
+      product_desc:    r.PROD_DESC,
+      site:            r.SITE,
+      location:        r.LOCATION || r.SITE || "",
+      available_qty:   Number(r.AVAILABLE_QTY) || 0,
+      physical_qty:    Number(r.PHYSICAL_QTY)  || 0,
+      allocated_qty:   Number(r.ALLOCATED_QTY) || 0,
+      unit:            r.UNIT,
+      uom:             r.UNIT,
+      category:        r.CATEGORY,
+      // Fields for InventoryAvailability.jsx filters
+      inventory_type:  "available",
+      owner:           "supplier",
+      permission:      "order",
+      order_qty:       0,
+      status: Number(r.AVAILABLE_QTY) > 0 ? "Available" : "Out of Stock",
     }));
 }
 
