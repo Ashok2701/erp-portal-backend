@@ -36,6 +36,7 @@ class BaseERPAdapter {
   // ── Products / Categories ─────────────────────────────
   async getProductCategories() { throw new Error("getProductCategories not implemented"); }
   async getStockMovements(f)   { return []; }
+  async getAllCreditNotes(r)    { return []; }
   async getAllSites()           { throw new Error("getAllSites not implemented"); }
   async getSupplierAddresses(code) { throw new Error("getSupplierAddresses not implemented"); }
 

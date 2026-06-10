@@ -880,6 +880,53 @@ class SageX3Adapter extends BaseERPAdapter {
     return result.recordset;
   }
 
+  async getAllCreditNotes(req) {
+    const pool         = await this.poolPromise;
+    const customerCode = await this.resolveCustomerCode(req);
+
+    let query = `
+      SELECT TOP 50
+        A.NUM_0        AS credit_note_number,
+        A.SIVTYP_0     AS type,
+        A.BPR_0        AS customer_code,
+        A.BPRNAM_0     AS customer_name,
+        A.ACCDAT_0     AS date,
+        A.CUR_0        AS currency,
+        A.AMTATI_0     AS amount_total,
+        A.AMTNOT_0     AS amount_excl_tax,
+        A.STA_0        AS status,
+        A.FCY_0        AS site,
+        A.REF_0        AS reference,
+        A.DES_0        AS description
+      FROM tbs.LEWISB.SINVOICE A
+      WHERE A.SIVTYP_0 IN ('AVC', 'CRN', 'CNO', 'AVI')
+    `;
+
+    const request = pool.request();
+    if (customerCode) {
+      query += ` AND A.BPR_0 = @customerCode`;
+      request.input("customerCode", sql.NVarChar, customerCode);
+    }
+    query += ` ORDER BY A.ACCDAT_0 DESC`;
+
+    const result = await request.query(query);
+    return result.recordset.map(r => ({
+      id:                  r.credit_note_number,
+      credit_note_number:  r.credit_note_number,
+      type:                r.type,
+      customer_code:       r.customer_code,
+      customer_name:       r.customer_name,
+      date:                r.date,
+      currency:            r.currency,
+      amount_total:        Number(r.amount_total || 0),
+      amount_excl_tax:     Number(r.amount_excl_tax || 0),
+      status:              r.status === '3' ? 'Paid' : r.status === '2' ? 'Posted' : 'Draft',
+      site:                r.site,
+      reference:           r.reference,
+      description:         r.description,
+    }));
+  }
+
   async getInvoiceDetail(id, user) {
 
     const pool = await this.poolPromise;
