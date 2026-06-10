@@ -14,6 +14,21 @@ exports.getInventory = async (req, res) => {
   }
 };
 
+exports.getMovements = async (req, res) => {
+  try {
+    const filters = {
+      product:  req.query.product  || null,
+      location: req.query.location || null,
+      site:     req.query.site     || null,
+    };
+    const data = await inventoryService.getMovements(req.user, filters);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("MOVEMENTS ERROR:", err.message);
+    res.json({ success: true, data: [], warning: err.message });
+  }
+};
+
 exports.getInventorySummary = async (req, res) => {
   try {
     const data = await inventoryService.getSummary(req.user);

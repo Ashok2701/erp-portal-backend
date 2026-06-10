@@ -266,3 +266,17 @@ async function getProjected(adapter, ctx, filters) {
     projected_qty:  row.available_qty + (transitMap[row.product_code] || 0),
   }));
 }
+
+// ── Stock Movements drill-down ─────────────────────────────────
+exports.getMovements = async (user, filters) => {
+  const ctx     = await resolveUserContext(user);
+  const adapter = await ERPFactory.getERPAdapterForUser(user);
+
+  const movements = await adapter.getStockMovements({
+    site:     filters.site     || ctx.site,
+    product:  filters.product  || null,
+    location: filters.location || null,
+  });
+
+  return movements;
+};

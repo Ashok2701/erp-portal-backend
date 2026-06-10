@@ -125,10 +125,11 @@ exports.createContent = async (user, body) => {
 // ================================================================
 exports.getAllContent = async (user) => {
   const result = await db.query(
-    `SELECT DISTINCT c.*, uc.status, uc.viewed_at, uc.signed_at
+    `SELECT DISTINCT c.*, uc.status, uc.viewed_at, uc.signed_at, COALESCE(u.full_name, u.username, 'Admin') AS creator_name
      FROM content c
      LEFT JOIN content_targets ct ON c.id = ct.content_id
      LEFT JOIN user_content uc ON uc.content_id = c.id AND uc.user_id = $1
+     LEFT JOIN users u ON u.user_id = c.created_by
      WHERE ct.target_type = 'ALL'
        OR (ct.target_type = 'USER')
        OR (ct.target_type = 'ROLE')
@@ -255,10 +256,12 @@ exports.getContentById = async (user, contentId) => {
        c.*,
        COALESCE(uc.status, 'NEW') AS status,
        uc.viewed_at,
-       uc.signed_at
+       uc.signed_at,
+       COALESCE(u.full_name, u.username, 'Admin') AS creator_name
      FROM content c
      JOIN content_targets ct ON c.id = ct.content_id
      LEFT JOIN user_content uc ON uc.content_id = c.id AND uc.user_id = $1
+     LEFT JOIN users u ON u.user_id = c.created_by
      WHERE c.id = $2
        AND (
          ct.target_type = 'ALL'

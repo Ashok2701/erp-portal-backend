@@ -1146,7 +1146,8 @@ class SageX3Adapter extends BaseERPAdapter {
         AVAILABLE_QTY,
         UNIT,
         LOCATION,
-        CATEGORY
+        CATEGORY,
+        UPDDAT AS LAST_UPDATE
       FROM LEWISB.XSTDALN_STOCK
       WHERE 1=1
     `;
@@ -1289,6 +1290,62 @@ class SageX3Adapter extends BaseERPAdapter {
   // =====================================================
   // SITES
   // =====================================================
+
+  // Stock movements (IN/OUT) for a specific product + location
+  async getStockMovements({ site, product, location }) {
+    const pool = await this.poolPromise;
+    const { sql } = require("mssql");
+
+    // Try STOJOU (stock journal) first — standard SageX3 movements table
+    let result;
+    try {
+      const req = pool.request();
+      let query = `
+        SELECT TOP 100
+          SJ.STOFCY_0   AS SITE,
+          SJ.ITMREF_0   AS PRODUCT,
+          SJ.ITMDSC_0   AS PROD_DESC,
+          SJ.LOC_0      AS LOCATION,
+          SJ.MVTTYP_0   AS MOVEMENT_TYPE,
+          SJ.QTY_0      AS QUANTITY,
+          SJ.UOM_0      AS UNIT,
+          SJ.VCRNUM_0   AS REFERENCE,
+          SJ.CREDAT_0   AS MOVEMENT_DATE,
+          CASE WHEN SJ.SENS_0 = 1 THEN 'IN' ELSE 'OUT' END AS DIRECTION
+        FROM tbs.LEWISB.STOJOU SJ
+        WHERE 1=1
+      `;
+      if (site) {
+        query += ` AND SJ.STOFCY_0 = @site`;
+        req.input("site", sql.VarChar, site);
+      }
+      if (product) {
+        query += ` AND SJ.ITMREF_0 = @product`;
+        req.input("product", sql.VarChar, product);
+      }
+      if (location) {
+        query += ` AND SJ.LOC_0 = @location`;
+        req.input("location", sql.VarChar, location);
+      }
+      query += ` ORDER BY SJ.CREDAT_0 DESC`;
+      result = await req.query(query);
+      return result.recordset.map(r => ({
+        site:          r.SITE,
+        product_code:  r.PRODUCT,
+        product_desc:  r.PROD_DESC,
+        location:      r.LOCATION,
+        movement_type: r.MOVEMENT_TYPE,
+        direction:     r.DIRECTION,
+        quantity:      Number(r.QUANTITY) || 0,
+        unit:          r.UNIT,
+        reference:     r.REFERENCE,
+        date:          r.MOVEMENT_DATE,
+      }));
+    } catch (err) {
+      console.warn("getStockMovements STOJOU failed:", err.message);
+      return [];
+    }
+  }
 
   async getAllSites() {
 

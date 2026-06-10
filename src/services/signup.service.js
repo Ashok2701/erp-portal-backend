@@ -4,6 +4,37 @@ const { v4: uuidv4 } = require("uuid");
 
 // ==================== SIGNUP ====================
 
+// ── Soft email domain validation ─────────────────────────────────
+// Soft: warns admin but does NOT block signup
+exports.checkEmailDomain = async (email, customerCode, tenantId) => {
+  if (!email || !customerCode) return { valid: true, warning: null };
+  const emailDomain = email.split('@')[1]?.toLowerCase();
+  if (!emailDomain) return { valid: true, warning: null };
+  try {
+    const result = await db.query(
+      `SELECT allowed_email_domains FROM erp_customers
+       WHERE customer_code = $1 AND tenant_id = $2 LIMIT 1`,
+      [customerCode, tenantId]
+    );
+    if (!result.rows.length || !result.rows[0].allowed_email_domains)
+      return { valid: true, warning: null, domain: emailDomain, unconfigured: true };
+
+    const allowed = result.rows[0].allowed_email_domains
+      .split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
+
+    if (!allowed.length) return { valid: true, warning: null };
+
+    const ok = allowed.some(d => emailDomain === d || emailDomain.endsWith('.' + d));
+    return ok
+      ? { valid: true,  warning: null, domain: emailDomain }
+      : { valid: false, warning: `Email domain @${emailDomain} is not in the allowed list for this customer account (${allowed.map(d=>'@'+d).join(', ')})`,
+          domain: emailDomain, allowed_domains: allowed };
+  } catch (err) {
+    console.warn("checkEmailDomain skipped:", err.message);
+    return { valid: true, warning: null };
+  }
+};
+
 exports.signup = async (body) => {
   const { username, full_name, email, phone, password, requested_role, company_details } = body;
 

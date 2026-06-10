@@ -22,7 +22,12 @@ exports.getPendingUsers = async (req, res) => {
 exports.getUserDetail = async (req, res) => {
   try {
     const data = await service.getUserDetail(req.params.id);
-    res.json({ success: true, data });
+    // Soft domain check — warns admin, does not block
+    let domain_check = null;
+    if (data?.email && data?.erp_entity_code) {
+      domain_check = await service.checkEmailDomain(data.email, data.erp_entity_code, req.user.tenant_id);
+    }
+    res.json({ success: true, data: { ...data, domain_check } });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
