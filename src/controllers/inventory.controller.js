@@ -32,12 +32,11 @@ exports.getStockRequests = async (req, res) => {
          sr.comment            AS notes,
          u.username            AS requested_by,
          u.full_name,
-         (SELECT COUNT(*) FROM sales_request_items sri
-          WHERE sri.drop_request_id = sr.drop_request_id) AS item_count,
-         (SELECT STRING_AGG(sri.product_code, ', ')
-          FROM sales_request_items sri
-          WHERE sri.drop_request_id = sr.drop_request_id
-          LIMIT 1) AS product_codes
+         u.allowedsite         AS site,
+         (SELECT COUNT(*)   FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id) AS item_count,
+         (SELECT sri.product_code FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id ORDER BY sri.id LIMIT 1) AS first_product_code,
+         (SELECT sri.prod_desc   FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id ORDER BY sri.id LIMIT 1) AS first_product_name,
+         (SELECT SUM(sri.quantity) FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id) AS total_items_qty
        FROM sales_requests sr
        JOIN users u ON u.user_id = sr.user_id
        WHERE sr.user_id = $1
@@ -47,18 +46,26 @@ exports.getStockRequests = async (req, res) => {
     );
 
     const rows = result.rows.map(r => ({
-      id:           r.id,
-      ref:          r.ref,
-      status:       mapStatus(r.status),
-      priority:     "NORMAL",
-      total_amount: Number(r.total_amount || 0),
-      total_qty:    Number(r.total_qty || 0),
-      item_count:   Number(r.item_count || 0),
-      product_codes:r.product_codes || "",
-      requested_by: r.full_name || r.requested_by,
-      request_date: r.request_date || r.created_time,
-      erp_order_no: r.erp_order_no || null,
-      notes:        r.notes || "",
+      id:            r.id,
+      ref:           r.ref,
+      status:        mapStatus(r.status),
+      priority:      "NORMAL",
+      total_amount:  Number(r.total_amount || 0),
+      total_qty:     Number(r.total_qty || r.total_items_qty || 0),
+      qty:           Number(r.total_qty || r.total_items_qty || 0),
+      item_count:    Number(r.item_count || 0),
+      product_code:  r.first_product_code || "",
+      product_name:  r.first_product_name || (r.item_count > 1 ? `${r.item_count} products` : ""),
+      product_codes: r.first_product_code || "",
+      from_location: r.site || "",
+      to_location:   "",
+      requested_by:  r.full_name || r.requested_by,
+      requested_on:  r.request_date || r.created_time,
+      request_date:  r.request_date || r.created_time,
+      needed_by:     null,
+      erp_order_no:  r.erp_order_no || null,
+      note:          r.notes || "",
+      uom:           "Units",
     }));
 
     res.json({ success: true, data: rows });
