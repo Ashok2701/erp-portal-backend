@@ -123,9 +123,12 @@ exports.getSummary = async (user) => {
 // ================================================================
 async function getConsignment(adapter, ctx, filters) {
   const stock = await adapter.getStock({
-    site:     ctx.site,
-    product:  filters.search   || null,
-    category: filters.category || null,
+    site:         ctx.site,
+    product:      filters.search      || null,
+    category:     filters.category    || null,
+    // Filter by customer-owned locations (LOCTYP_0=3) in X3
+    // Only applies when user has an erp_entity_code (B2B customer)
+    customerCode: ctx.customerCode    || null,
   });
 
   // Normalise column names + add computed status + allow order qty
