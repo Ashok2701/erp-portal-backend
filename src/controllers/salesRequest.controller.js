@@ -39,3 +39,13 @@ exports.generateOrder = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+exports.patchStatus = async (req, res) => {
+  try {
+    await service.patchStatus(req.params.id, req.body);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('PATCH STATUS ERROR:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
