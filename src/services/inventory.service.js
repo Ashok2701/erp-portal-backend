@@ -280,3 +280,63 @@ exports.getMovements = async (user, filters) => {
 
   return movements;
 };
+
+// ── Network Inventory — stock across all sites ─────────────────
+exports.getNetwork = async (user) => {
+  const ctx     = await resolveUserContext(user);
+  const adapter = await ERPFactory.getERPAdapterForUser(user);
+
+  // Get stock for user's own site
+  const ownStock = await adapter.getStock({ site: ctx.site }).catch(() => []);
+
+  // Get all available sites
+  let allSites = [];
+  try {
+    allSites = await adapter.getAllSites();
+  } catch (_) {}
+
+  // Get stock for other sites (excluding user's own)
+  const otherSites = allSites.filter(s => s.SITE !== ctx.site && s.SITE);
+  const otherLocations = [];
+
+  for (const site of otherSites.slice(0, 5)) { // limit to 5 other sites
+    try {
+      const siteStock = await adapter.getStock({ site: site.SITE });
+      if (siteStock.length > 0) {
+        otherLocations.push({
+          id:       site.SITE,
+          location: site.DESCR || site.SITE,
+          contact:  `stock@${site.SITE.toLowerCase()}.com`,
+          items: siteStock
+            .filter(r => Number(r.AVAILABLE_QTY) > 0)
+            .slice(0, 20)
+            .map(r => ({
+              product_code:  r.PRODUCT,
+              product_name:  r.PROD_DESC,
+              available_qty: Number(r.AVAILABLE_QTY) || 0,
+              physical_qty:  Number(r.PHYSICAL_QTY)  || 0,
+              uom:           r.UNIT || 'EA',
+              location:      r.LOCATION || site.SITE,
+              permission:    'REQUEST_ONLY',
+            })),
+        });
+      }
+    } catch (_) {}
+  }
+
+  return {
+    own_location: ctx.site,
+    own_stock: ownStock
+      .filter(r => Number(r.PHYSICAL_QTY) > 0)
+      .slice(0, 20)
+      .map(r => ({
+        product_code: r.PRODUCT,
+        product_name: r.PROD_DESC,
+        qty:          Number(r.PHYSICAL_QTY) || 0,
+        available:    Number(r.AVAILABLE_QTY) || 0,
+        uom:          r.UNIT || 'EA',
+      })),
+    other_locations: otherLocations,
+    total_sites: allSites.length,
+  };
+};

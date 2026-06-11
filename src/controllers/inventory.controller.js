@@ -102,6 +102,16 @@ exports.getMovements = async (req, res) => {
   }
 };
 
+exports.getNetwork = async (req, res) => {
+  try {
+    const data = await inventoryService.getNetwork(req.user);
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("NETWORK ERROR:", err.message);
+    res.json({ success: true, data: { own_location: '', own_stock: [], other_locations: [], total_sites: 0 } });
+  }
+};
+
 exports.getInventorySummary = async (req, res) => {
   try {
     const data = await inventoryService.getSummary(req.user);

@@ -13,6 +13,14 @@ class ChatController {
    * Send a message and get AI response
    */
   static async sendMessage(req, res) {
+    // Return friendly message if OpenAI not configured
+    if (!process.env.OPENAI_API_KEY) {
+      return res.json({
+        response: "AI Assistant is not configured yet. Please contact your administrator to set up the OpenAI integration.",
+        conversation_id: req.body.conversation_id || "demo",
+        actions: []
+      });
+    }
     try {
       const { message, conversation_id } = req.body;
       const userId = req.user.user_id;
