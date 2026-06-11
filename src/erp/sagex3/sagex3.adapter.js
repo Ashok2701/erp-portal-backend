@@ -600,9 +600,13 @@ class SageX3Adapter extends BaseERPAdapter {
       );
     }
 
-    query += `
-      ORDER BY A.DLVDAT_0 DESC
-    `;
+    // ── In-Transit view: only undelivered/not-yet-validated ─────────
+    // VCRSTA_0 = 1 means In Progress (not yet validated in X3)
+    if (req.inTransitOnly) {
+      query += ` AND A.VCRSTA_0 = 1`;
+    }
+
+    query += ` ORDER BY A.DLVDAT_0 DESC`;
 
     const result =
       await request.query(query);
@@ -1244,9 +1248,7 @@ class SageX3Adapter extends BaseERPAdapter {
       request.input("category", sql.VarChar, filters.category);
     }
 
-    // ── Consignment: filter by customer-owned locations ──────────────
-    // When customerCode is supplied, only return stock in locations
-    // that belong to that customer (LOCTYP_0 = 3 = Customer type in X3)
+    // ── Consignment: filter to customer-owned locations (LOCTYP_0=3) ──
     if (filters.customerCode) {
       query += `
         AND LOCATION IN (
@@ -1257,6 +1259,16 @@ class SageX3Adapter extends BaseERPAdapter {
         )
       `;
       request.input("customerCode", sql.VarChar, filters.customerCode);
+    }
+
+    // ── Available: exclude customer-type locations ────────────────────
+    // Available shows warehouse-level stock only — no customer bins
+    if (filters.excludeCustomerLocations) {
+      query += `
+        AND LOCATION NOT IN (
+          SELECT LOC_0 FROM LEWISB.LOCATION WHERE LOCTYP_0 = 3
+        )
+      `;
     }
 
     const result = await request.query(query);
