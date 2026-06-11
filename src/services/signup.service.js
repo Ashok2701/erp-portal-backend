@@ -4,33 +4,45 @@ const { v4: uuidv4 } = require("uuid");
 
 // ==================== SIGNUP ====================
 
-// ── Soft email domain validation ─────────────────────────────────
-// Soft: warns admin but does NOT block signup
+// ── Soft email domain validation — queries X3 directly ──────────
+// No extra table needed — uses BPCUSTOMER.WEB_0 from SageX3
 exports.checkEmailDomain = async (email, customerCode, tenantId) => {
-  if (!email || !customerCode) return { valid: true, warning: null };
+  if (!email) return { valid: true, warning: null };
   const emailDomain = email.split('@')[1]?.toLowerCase();
   if (!emailDomain) return { valid: true, warning: null };
+
   try {
-    const result = await db.query(
-      `SELECT allowed_email_domains FROM erp_customers
-       WHERE customer_code = $1 AND tenant_id = $2 LIMIT 1`,
-      [customerCode, tenantId]
-    );
-    if (!result.rows.length || !result.rows[0].allowed_email_domains)
-      return { valid: true, warning: null, domain: emailDomain, unconfigured: true };
+    const ERPFactory = require("../erp/erp.factory");
+    const adapter    = await ERPFactory.getERPAdapterForTenant(tenantId);
 
-    const allowed = result.rows[0].allowed_email_domains
-      .split(',').map(d => d.trim().toLowerCase()).filter(Boolean);
+    // Tier 1 — exact email match in X3
+    const exactMatches = await adapter.getCustomers({ emailFilter: email }).catch(() => []);
+    if (exactMatches.length > 0) {
+      return { valid: true, warning: null, domain: emailDomain, match: 'exact', matched_bp: exactMatches[0].customer_code };
+    }
 
-    if (!allowed.length) return { valid: true, warning: null };
+    // Tier 2 — same domain match in X3
+    const domainMatches = await adapter.getCustomers({ domainFilter: emailDomain }).catch(() => []);
+    if (domainMatches.length > 0) {
+      return {
+        valid: true,
+        warning: `No exact email match in X3. Found ${domainMatches.length} BP account(s) with domain @${emailDomain} — please verify the correct account is selected.`,
+        domain: emailDomain,
+        match: 'domain',
+        domain_matches: domainMatches.map(c => ({ code: c.customer_code, name: c.customer_name })),
+      };
+    }
 
-    const ok = allowed.some(d => emailDomain === d || emailDomain.endsWith('.' + d));
-    return ok
-      ? { valid: true,  warning: null, domain: emailDomain }
-      : { valid: false, warning: `Email domain @${emailDomain} is not in the allowed list for this customer account (${allowed.map(d=>'@'+d).join(', ')})`,
-          domain: emailDomain, allowed_domains: allowed };
+    // No match at all
+    return {
+      valid: false,
+      warning: `Email @${emailDomain} has no matching BP account in X3. The user's email domain is not registered against any customer.`,
+      domain: emailDomain,
+      match: 'none',
+    };
   } catch (err) {
-    console.warn("checkEmailDomain skipped:", err.message);
+    // X3 unreachable — skip validation silently
+    console.warn("checkEmailDomain skipped (X3 unavailable):", err.message);
     return { valid: true, warning: null };
   }
 };
