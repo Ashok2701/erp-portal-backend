@@ -1221,10 +1221,9 @@ class SageX3Adapter extends BaseERPAdapter {
       WHERE 1=1
     `;
 
-    const request =
-      pool.request();
+    const request = pool.request();
 
-    // Dynamic site filter — replaces hardcoded site
+    // Dynamic site filter
     if (filters.site) {
       query += ` AND SITE = @site`;
       request.input("site", sql.VarChar, filters.site);
@@ -1236,34 +1235,31 @@ class SageX3Adapter extends BaseERPAdapter {
     }
 
     if (filters.warehouse) {
-
-      query += `
-        AND LOCATION = @warehouse
-      `;
-
-      request.input(
-        "warehouse",
-        sql.VarChar,
-        filters.warehouse
-      );
+      query += ` AND LOCATION = @warehouse`;
+      request.input("warehouse", sql.VarChar, filters.warehouse);
     }
 
     if (filters.category) {
-
-      query += `
-        AND CATEGORY = @category
-      `;
-
-      request.input(
-        "category",
-        sql.VarChar,
-        filters.category
-      );
+      query += ` AND CATEGORY = @category`;
+      request.input("category", sql.VarChar, filters.category);
     }
 
-    const result =
-      await request.query(query);
+    // ── Consignment: filter by customer-owned locations ──────────────
+    // When customerCode is supplied, only return stock in locations
+    // that belong to that customer (LOCTYP_0 = 3 = Customer type in X3)
+    if (filters.customerCode) {
+      query += `
+        AND LOCATION IN (
+          SELECT LOC_0
+          FROM LEWISB.LOCATION
+          WHERE BPCNUM_0 = @customerCode
+          AND   LOCTYP_0 = 3
+        )
+      `;
+      request.input("customerCode", sql.VarChar, filters.customerCode);
+    }
 
+    const result = await request.query(query);
     return result.recordset;
   }
 
