@@ -577,6 +577,10 @@ class SageX3Adapter extends BaseERPAdapter {
         A.WEU_0,
         A.VOL_0,
         A.VOU_0,
+        A.UPDDAT_0,
+        A.UPDTIM_0,
+        A.BPCZIPCODE_0 AS DEL_ZIP,
+        A.BPCCTY_0 AS DEL_CITY,
         C.BPTNAM_0
       FROM LEWISB.SDELIVERY A
       LEFT JOIN tbs.LEWISB.BPCARRIER C
@@ -701,7 +705,7 @@ class SageX3Adapter extends BaseERPAdapter {
       await this.resolveCustomerCode(req);
 
     let query = `
-      SELECT TOP 20
+      SELECT TOP 100
         A.SALFCY_0,
         A.ORDINVATI_0,
         A.CUR_0,
@@ -714,10 +718,19 @@ class SageX3Adapter extends BaseERPAdapter {
         A.SHIDAT_0,
         A.ALLSTA_0,
         A.INVSTA_0,
-        C.BPTNAM_0
+        A.UPDDAT_0,
+        A.UPDTIM_0,
+        C.BPTNAM_0,
+        F.FCYDES_0 AS SITE_DESC,
+        BP.BPCZIPCODE_0 AS DEL_ZIP,
+        BP.BPCCTY_0 AS DEL_CITY
       FROM tbs.LEWISB.SORDER A
       LEFT JOIN tbs.LEWISB.BPCARRIER C
         ON A.BPTNUM_0 = C.BPTNUM_0
+      LEFT JOIN tbs.LEWISB.FACILITY F
+        ON A.SALFCY_0 = F.FCY_0
+      LEFT JOIN tbs.LEWISB.BPCUSTOMER BP
+        ON A.BPCORD_0 = BP.BPCNUM_0
       WHERE 1=1
     `;
 
@@ -789,9 +802,14 @@ class SageX3Adapter extends BaseERPAdapter {
         )
 
         .query(`
-          SELECT *
-          FROM tbs.LEWISB.SORDER
-          WHERE SOHNUM_0=@orderNo
+          SELECT A.*,
+            F.FCYDES_0 AS SITE_DESC,
+            BP.BPCZIPCODE_0 AS DEL_ZIP,
+            BP.BPCCTY_0 AS DEL_CITY
+          FROM tbs.LEWISB.SORDER A
+          LEFT JOIN tbs.LEWISB.FACILITY F ON A.SALFCY_0 = F.FCY_0
+          LEFT JOIN tbs.LEWISB.BPCUSTOMER BP ON A.BPCORD_0 = BP.BPCNUM_0
+          WHERE A.SOHNUM_0=@orderNo
         `);
 
     if (!result.recordset.length)
