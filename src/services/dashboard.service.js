@@ -58,14 +58,18 @@ exports.getAdminStats = async (user) => {
               AND created_at >= NOW()-INTERVAL '7 days'`, [tenant_id]),
   ]);
 
-  // ERP stats (non-blocking)
+  // ERP stats — race with 3s timeout so slow X3 never blocks dashboard
   let products = [], categories = [];
   try {
-    const adapter = await ERPFactory.getERPAdapterForUser(user);
-    [products, categories] = await Promise.all([
-      adapter.getProducts({}).catch(() => []),
-      adapter.getProductCategories().catch(() => []),
-    ]);
+    const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
+    const erpFetch = (async () => {
+      const adapter = await ERPFactory.getERPAdapterForUser(user);
+      return Promise.all([
+        adapter.getProducts({}).catch(() => []),
+        adapter.getProductCategories().catch(() => []),
+      ]);
+    })();
+    [products, categories] = await Promise.race([erpFetch, timeout]);
   } catch (_) {}
 
   // Build unified activity feed sorted by time
@@ -88,13 +92,21 @@ exports.getAdminStats = async (user) => {
   activityFeed.sort((a,b) => new Date(b.time) - new Date(a.time));
 
   // User lifecycle funnel
-  const [fCreated, fVerif, fPendApproval, fActive, fRejected] = await Promise.all([
-    db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='CREATED'`, [tenant_id]),
-    db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='IN_VERIFICATION'`, [tenant_id]),
-    db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='PENDING_APPROVAL'`, [tenant_id]),
-    db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='ACTIVE'`, [tenant_id]),
-    db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='REJECTED'`, [tenant_id]),
-  ]);
+  // Funnel queries merged with a single efficient query
+  const funnelRes = await db.query(
+    `SELECT status, COUNT(*) FROM users WHERE tenant_id=$1
+     AND status IN ('CREATED','IN_VERIFICATION','PENDING_APPROVAL','ACTIVE','REJECTED')
+     GROUP BY status`,
+    [tenant_id]
+  );
+  const funnelMap = Object.fromEntries(funnelRes.rows.map(r => [r.status, Number(r.count)]));
+  const [fCreated, fVerif, fPendApproval, fActive, fRejected] = [
+    { rows: [{ count: funnelMap['CREATED'] || 0 }] },
+    { rows: [{ count: funnelMap['IN_VERIFICATION'] || 0 }] },
+    { rows: [{ count: funnelMap['PENDING_APPROVAL'] || 0 }] },
+    { rows: [{ count: funnelMap['ACTIVE'] || 0 }] },
+    { rows: [{ count: funnelMap['REJECTED'] || 0 }] },
+  ];
 
   return {
     users: {
