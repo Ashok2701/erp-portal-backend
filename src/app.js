@@ -52,4 +52,9 @@ app.use("/maintenance",  maintenanceRoutes);
 app.use("/credit-notes", require("./routes/creditNotes.routes"));
 app.use("/superadmin",  superadminRoutes);
 
+// Auto-migration: add erp_delivery_no column if not exists
+const db = require('./config/db');
+db.query(`ALTER TABLE sales_requests ADD COLUMN IF NOT EXISTS erp_delivery_no VARCHAR(100)`)
+  .catch(e => console.warn('Migration warning:', e.message));
+
 module.exports = app;
