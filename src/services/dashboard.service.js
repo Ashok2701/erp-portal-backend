@@ -217,9 +217,9 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
     db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1 AND status='CREATED'`, [uid]),
     db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1 AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
     // Recent orders
-    db.query(`SELECT sr.drop_request_id AS request_no, DATE(sr.request_date) AS date,
-                     (SELECT COUNT(*) FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id) AS products_count,
-                     sr.status, sr.erp_order_no AS so_number,
+    db.query(`SELECT sr.sales_request_id AS request_no, DATE(sr.request_date) AS date,
+                     (SELECT COUNT(*) FROM sales_request_items sri WHERE sri.sales_request_id=sr.sales_request_id) AS products_count,
+                     sr.status, sr.request_number AS so_number,
                      sr.request_date AS delivery_date, sr.total_amount AS amount
               FROM sales_requests sr WHERE sr.user_id=$1
               ORDER BY sr.request_date DESC LIMIT 10`, [uid]),
