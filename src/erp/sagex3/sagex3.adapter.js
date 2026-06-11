@@ -1217,7 +1217,7 @@ class SageX3Adapter extends BaseERPAdapter {
         UNIT,
         LOCATION,
         CATEGORY,
-        UPDDAT AS LAST_UPDATE
+        UPDDAT_0 AS LAST_UPDATE
       FROM LEWISB.XSTDALN_STOCK
       WHERE 1=1
     `;
