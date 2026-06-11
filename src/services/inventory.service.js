@@ -161,9 +161,10 @@ async function getConsignment(adapter, ctx, filters) {
 // ================================================================
 async function getAvailable(adapter, ctx, filters) {
   const stock = await adapter.getStock({
-    site:     ctx.site,
-    product:  filters.search   || null,
-    category: filters.category || null,
+    site:                    ctx.site,
+    product:                 filters.search   || null,
+    category:                filters.category || null,
+    excludeCustomerLocations: true,   // Available = warehouse stock only, no customer bins
   });
 
   return stock
@@ -196,7 +197,7 @@ async function getAvailable(adapter, ctx, filters) {
 // Uses adapter.getAllDeliveries() → LEWISB.SDELIVERY (SQL Server / X3)
 // ================================================================
 async function getInTransit(adapter, ctx, filters) {
-  const fakeReq = { user: ctx };
+  const fakeReq = { user: ctx, inTransitOnly: true };  // only unvalidated deliveries
   const deliveries = await adapter.getAllDeliveries(fakeReq);
 
   // Flatten deliveries to per-product rows for InTransitInventory.jsx
