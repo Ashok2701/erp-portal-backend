@@ -577,8 +577,6 @@ class SageX3Adapter extends BaseERPAdapter {
         A.WEU_0,
         A.VOL_0,
         A.VOU_0,
-        A.UPDDAT_0,
-        A.UPDTIM_0,
         C.BPTNAM_0
       FROM LEWISB.SDELIVERY A
       LEFT JOIN tbs.LEWISB.BPCARRIER C
@@ -716,8 +714,6 @@ class SageX3Adapter extends BaseERPAdapter {
         A.SHIDAT_0,
         A.ALLSTA_0,
         A.INVSTA_0,
-        A.UPDDAT_0,
-        A.UPDTIM_0,
         C.BPTNAM_0
       FROM tbs.LEWISB.SORDER A
       LEFT JOIN tbs.LEWISB.BPCARRIER C
