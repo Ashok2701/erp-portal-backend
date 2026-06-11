@@ -7,7 +7,7 @@ router.post("/", auth, ctrl.createSalesRequest);
 router.get("/", auth, ctrl.getAllSalesRequest);
 router.post("/generate-order", auth, ctrl.generateOrder);
 router.get("/:id", auth, ctrl.getSalesRequestById);
-
+router.patch("/:id", auth, ctrl.patchStatus);
 router.put("/:id", auth, ctrl.updateSalesRequest);
 router.delete("/:id", auth, ctrl.removeSalesRequest);
 
