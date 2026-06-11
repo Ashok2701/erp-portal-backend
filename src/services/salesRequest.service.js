@@ -175,6 +175,26 @@ exports.getById = async (dropRequestId) => {
   };
 };
 
+
+exports.patchStatus = async (dropRequestId, body) => {
+  // Lightweight status-only patch — used by admin to update status/ERP numbers
+  const fields = [];
+  const values = [];
+  let i = 1;
+
+  if (body.status !== undefined)        { fields.push(`status=$${i++}`);           values.push(body.status); }
+  if (body.erp_order_no !== undefined)  { fields.push(`erp_order_no=$${i++}`);     values.push(body.erp_order_no || null); }
+  if (body.erp_delivery_no !== undefined){ fields.push(`erp_delivery_no=$${i++}`); values.push(body.erp_delivery_no || null); }
+
+  if (fields.length === 0) return;
+
+  values.push(dropRequestId);
+  await db.query(
+    `UPDATE sales_requests SET ${fields.join(', ')} WHERE drop_request_id=$${i}`,
+    values
+  );
+};
+
 exports.update = async (dropRequestId, body) => {
 
   const client = await db.connect();
