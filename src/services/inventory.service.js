@@ -193,31 +193,79 @@ async function getAvailable(adapter, ctx, filters) {
 // Uses adapter.getAllDeliveries() → LEWISB.SDELIVERY (SQL Server / X3)
 // ================================================================
 async function getInTransit(adapter, ctx, filters) {
-  // getAllDeliveries expects a req-like object with user attached
   const fakeReq = { user: ctx };
   const deliveries = await adapter.getAllDeliveries(fakeReq);
 
-  // Normalise column names from X3 raw field names
-  return deliveries.map(d => ({
-    delivery_no:   d.SDHNUM_0,
-    order_no:      d.SOHNUM_0,
-    from_site:     d.STOFCY_0,
-    delivery_to:   d.BPDNAM_0,
-    address_code:  d.BPAADD_0,
-    expected_date: d.DLVDAT_0,
-    ship_date:     d.SHIDAT_0,
-    total_qty:     Number(d.DSPTOTQTY_0) || 0,
-    customer_code: d.BPCORD_0,
-    carrier:       d.BPTNAM_0,
-    items: (d.items || []).map(i => ({
-      product_code: i.ITMREF_0,
-      product_desc: i.ITMDES1_0,
-      qty:          Number(i.QTY_0)     || 0,
-      unit:         i.SAU_0 || i.UNITS,
-      unit_price:   Number(i.NETPRI_0)  || 0,
-      total_amount: Number(i.total_amount) || 0,
-    })),
-  }));
+  // Flatten deliveries to per-product rows for InTransitInventory.jsx
+  const rows = [];
+  for (const d of deliveries) {
+    const items = d.items || [];
+    const shipmentRef = d.SDHNUM_0 || d.delivery_no || '';
+    const fromSite    = d.STOFCY_0 || d.from_site   || '';
+    const destination = d.BPDNAM_0 || d.delivery_to || ctx.customerCode || '';
+    const dispatchDate= d.SHIDAT_0 || d.ship_date   || null;
+    const eta         = d.DLVDAT_0 || d.expected_date|| null;
+    const carrier     = d.BPTNAM_0 || '';
+
+    const now = Date.now();
+    const etaTs = eta ? new Date(eta).getTime() : null;
+    const status = !etaTs ? 'IN_TRANSIT'
+      : etaTs < now ? 'DELAYED'
+      : etaTs - now < 2 * 24 * 3600 * 1000 ? 'ARRIVING_SOON'
+      : 'IN_TRANSIT';
+
+    // Build timeline steps
+    const timeline = [
+      { id: 1, label: 'Order Confirmed',  date: dispatchDate, done: true  },
+      { id: 2, label: 'Dispatched',       date: dispatchDate, done: !!dispatchDate },
+      { id: 3, label: 'In Transit',       date: null,         done: true  },
+      { id: 4, label: 'Expected Arrival', date: eta,          done: false },
+    ];
+
+    if (items.length === 0) {
+      // Delivery with no items — add as placeholder
+      rows.push({
+        id:           shipmentRef || String(rows.length),
+        product_code: '',
+        product_name: `Shipment ${shipmentRef}`,
+        uom:          '',
+        qty:          Number(d.DSPTOTQTY_0 || d.total_qty || 0),
+        source:       fromSite,
+        destination,
+        shipment_ref: shipmentRef,
+        dispatch_date:dispatchDate,
+        eta,
+        carrier,
+        status,
+        timeline,
+        delivery_no:  shipmentRef,
+      });
+    } else {
+      for (const item of items) {
+        rows.push({
+          id:           `${shipmentRef}-${item.ITMREF_0 || item.product_code || rows.length}`,
+          product_code: item.ITMREF_0 || item.product_code || '',
+          product_name: item.ITMDES1_0 || item.product_desc || item.product_code || '',
+          uom:          item.SAU_0 || item.UNITS || item.unit || 'EA',
+          qty:          Number(item.QTY_0 || item.qty || 0),
+          source:       fromSite,
+          destination,
+          shipment_ref: shipmentRef,
+          dispatch_date:dispatchDate,
+          eta,
+          carrier,
+          status,
+          timeline,
+          delivery_no:  shipmentRef,
+          // Keep nested for projected use
+          items:        items,
+          expected_date: eta,
+          delivery_date: eta,
+        });
+      }
+    }
+  }
+  return rows;
 }
 
 // ================================================================
@@ -232,14 +280,23 @@ async function getReserved(adapter, ctx, filters) {
 
   return stock
     .filter(r => Number(r.ALLOCATED_QTY) > 0)
-    .map(r => ({
-      product_code:  r.PRODUCT,
-      product_desc:  r.PROD_DESC,
-      site:          r.SITE,
-      location:      r.LOCATION,
-      reserved_qty:  Number(r.ALLOCATED_QTY) || 0,
-      physical_qty:  Number(r.PHYSICAL_QTY)  || 0,
-      unit:          r.UNIT,
+    .map((r, i) => ({
+      id:             `${r.PRODUCT}-${r.LOCATION || i}`,
+      product_code:   r.PRODUCT,
+      product_name:   r.PROD_DESC,
+      product_desc:   r.PROD_DESC,
+      site:           r.SITE,
+      location:       r.LOCATION || r.SITE || '',
+      customer:       ctx.customerCode || ctx.site || '',
+      allocated_qty:  Number(r.ALLOCATED_QTY) || 0,
+      used_qty:       Math.max(0, Number(r.ALLOCATED_QTY) - Number(r.AVAILABLE_QTY)),
+      remaining_qty:  Number(r.AVAILABLE_QTY) || 0,
+      physical_qty:   Number(r.PHYSICAL_QTY)  || 0,
+      reserved_qty:   Number(r.ALLOCATED_QTY) || 0,
+      uom:            r.UNIT || 'EA',
+      unit:           r.UNIT,
+      allocation_date: r.LAST_UPDATE || null,
+      status:         'RESERVED',
     }));
 }
 
@@ -252,18 +309,37 @@ async function getProjected(adapter, ctx, filters) {
     getInTransit(adapter, ctx, filters),
   ]);
 
-  // Build product → in-transit qty map
-  const transitMap = {};
+  // Build product → future deliveries map
+  const futureMap = {};
   for (const delivery of inTransit) {
+    const date = delivery.expected_date || delivery.delivery_date || null;
     for (const item of (delivery.items || [])) {
-      transitMap[item.product_code] = (transitMap[item.product_code] || 0) + (item.qty || 0);
+      const code = item.product_code;
+      if (!code) continue;
+      if (!futureMap[code]) futureMap[code] = [];
+      futureMap[code].push({
+        date:   date,
+        qty:    Number(item.qty || item.quantity || 0),
+        source: 'In Transit',
+      });
     }
   }
 
-  return consignment.map(row => ({
-    ...row,
-    in_transit_qty: transitMap[row.product_code] || 0,
-    projected_qty:  row.available_qty + (transitMap[row.product_code] || 0),
+  return consignment.map((row, i) => ({
+    id:              `${row.product_code}-${i}`,
+    product_code:    row.product_code,
+    product_name:    row.description || row.product_desc || row.product_code,
+    uom:             row.uom || row.unit || 'EA',
+    unit:            row.unit,
+    site:            row.site,
+    location:        row.location,
+    available_today: Number(row.available_qty) || 0,
+    physical_qty:    Number(row.physical_qty)  || 0,
+    allocated_qty:   Number(row.allocated_qty) || 0,
+    in_transit_qty:  (futureMap[row.product_code] || []).reduce((s,f) => s + f.qty, 0),
+    projected_qty:   Number(row.available_qty) + (futureMap[row.product_code] || []).reduce((s,f) => s + f.qty, 0),
+    future:          (futureMap[row.product_code] || []).slice(0, 5),
+    category:        row.category,
   }));
 }
 
