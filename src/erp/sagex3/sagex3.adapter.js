@@ -579,8 +579,6 @@ class SageX3Adapter extends BaseERPAdapter {
         A.VOU_0,
         A.UPDDAT_0,
         A.UPDTIM_0,
-        A.BPCZIPCODE_0 AS DEL_ZIP,
-        A.BPCCTY_0 AS DEL_CITY,
         C.BPTNAM_0
       FROM LEWISB.SDELIVERY A
       LEFT JOIN tbs.LEWISB.BPCARRIER C
