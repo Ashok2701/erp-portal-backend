@@ -54,7 +54,7 @@ app.use("/superadmin",  superadminRoutes);
 
 // Auto-migration: add erp_delivery_no column if not exists
 const db = require('./config/db');
-db.query(`ALTER TABLE sales_requests ADD COLUMN IF NOT EXISTS erp_delivery_no VARCHAR(100)`)
-  .catch(e => console.warn('Migration warning:', e.message));
+db.query(`ALTER TABLE sales_requests ADD COLUMN IF NOT EXISTS erp_delivery_no VARCHAR(100)`).catch(e => console.warn('Migration:', e.message));
+db.query(`ALTER TABLE sales_requests ADD COLUMN IF NOT EXISTS customer_notes TEXT`).catch(e => console.warn('Migration:', e.message));
 
 module.exports = app;
