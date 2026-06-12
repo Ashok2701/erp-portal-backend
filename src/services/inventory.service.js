@@ -155,6 +155,40 @@ async function getConsignment(adapter, ctx, filters) {
   }));
 }
 
+// ── In-Transit Inventory ─────────────────────────────────────
+async function getInTransit(adapter, ctx, filters) {
+  const customerCode = ctx.customerCode;
+  const site = ctx.site;
+  const sites = site ? [site] : [];
+
+  const rows = await adapter.getInTransitStock(customerCode, sites);
+
+  const s = (filters.search || '').toLowerCase();
+
+  return rows
+    .filter(r => !s ||
+      (r.PRODUCT || '').toLowerCase().includes(s) ||
+      (r.PROD_DESC || '').toLowerCase().includes(s) ||
+      (r.DELIVERY_NO || '').toLowerCase().includes(s))
+    .map(r => ({
+      id:              `${r.DELIVERY_NO}-${r.PRODUCT}`,
+      product_code:    r.PRODUCT,
+      product_desc:    r.PROD_DESC,
+      description:     r.PROD_DESC,
+      site:            r.SITE,
+      delivery_no:     r.DELIVERY_NO,
+      sales_order_no:  r.SALES_ORDER_NO,
+      expected_date:   r.EXPECTED_DATE,
+      qty:             Number(r.QTY) || 0,
+      quantity:        Number(r.QTY) || 0,
+      unit:            r.UNIT,
+      uom:             r.UNIT,
+      customer_code:   r.CUSTOMER_CODE,
+      customer_name:   r.CUSTOMER_NAME,
+      status:          'In Transit',
+    }));
+}
+
 // ── Stock Movements drill-down ─────────────────────────────────
 exports.getMovements = async (user, filters) => {
   const ctx     = await resolveUserContext(user);
