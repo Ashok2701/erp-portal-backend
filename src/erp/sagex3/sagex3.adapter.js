@@ -1405,6 +1405,68 @@ class SageX3Adapter extends BaseERPAdapter {
     }
   }
 
+
+  // ── Consignment: fetch stock for customer location ───────────────────────
+  // 1. Filter XSTDALN_STOCK WHERE LOCATION = customerCode AND SITE IN allowedSites
+  // 2. If empty → check STOLOC to determine correct error message
+  async getConsignmentStock(customerCode, sites) {
+    const pool = await this.poolPromise;
+    
+    // Build IN clause for sites (support single site or array)
+    const siteList = Array.isArray(sites) ? sites : [sites].filter(Boolean);
+    if (!customerCode || !siteList.length) return { stock: [], locationExists: false };
+
+    const request = pool.request();
+    request.input('customerCode', sql.VarChar, customerCode);
+
+    // Build parameterized site IN clause
+    const siteParams = siteList.map((s, i) => {
+      request.input(`site${i}`, sql.VarChar, s);
+      return `@site${i}`;
+    }).join(',');
+
+    // Step 1: Get stock where LOCATION = customer code AND SITE IN allowed sites
+    const stockResult = await request.query(`
+      SELECT
+        PRODUCT,
+        PROD_DESC,
+        SITE,
+        PHYSICAL_QTY,
+        ALLOCATED_QTY,
+        AVAILABLE_QTY,
+        UNIT,
+        LOCATION,
+        CATEGORY
+      FROM LEWISB.XSTDALN_STOCK
+      WHERE LOCATION = @customerCode
+      AND   SITE IN (${siteParams})
+    `);
+
+    const stock = stockResult.recordset;
+
+    // If stock found — return it
+    if (stock.length > 0) return { stock, locationExists: true };
+
+    // Step 2: No stock — check if consignment location exists for this customer
+    const request2 = pool.request();
+    request2.input('customerCode2', sql.VarChar, customerCode);
+    const siteParams2 = siteList.map((s, i) => {
+      request2.input(`site2_${i}`, sql.VarChar, s);
+      return `@site2_${i}`;
+    }).join(',');
+
+    const locResult = await request2.query(`
+      SELECT TOP 1 LOC_0
+      FROM LEWISB.STOLOC
+      WHERE LOCTYP_0 = 'CUS'
+      AND   LOC_0    = @customerCode2
+      AND   STOFCY_0 IN (${siteParams2})
+    `);
+
+    const locationExists = locResult.recordset.length > 0;
+    return { stock: [], locationExists };
+  }
+
   async getAllSites() {
 
     const pool = await this.poolPromise;
