@@ -1248,28 +1248,9 @@ class SageX3Adapter extends BaseERPAdapter {
       request.input("category", sql.VarChar, filters.category);
     }
 
-    // ── Consignment: filter to customer-owned locations (LOCTYP_0=3) ──
-    if (filters.customerCode) {
-      query += `
-        AND LOCATION IN (
-          SELECT LOC_0
-          FROM tbs.LEWISB.LOCATION
-          WHERE BPCNUM_0 = @customerCode
-          AND   LOCTYP_0 = 3
-        )
-      `;
-      request.input("customerCode", sql.VarChar, filters.customerCode);
-    }
-
-    // ── Available: exclude customer-type locations ────────────────────
-    // Available shows warehouse-level stock only — no customer bins
-    if (filters.excludeCustomerLocations) {
-      query += `
-        AND LOCATION NOT IN (
-          SELECT LOC_0 FROM tbs.LEWISB.LOCATION WHERE LOCTYP_0 = 3
-        )
-      `;
-    }
+    // NOTE: LOCATION table not confirmed in this X3 instance
+    // customerCode and excludeCustomerLocations filters disabled until table is verified
+    // TODO: verify correct X3 location table name before re-enabling
 
     const result = await request.query(query);
     return result.recordset;
