@@ -143,6 +143,7 @@ async function getAvailable(adapter, ctx, filters) {
       unit:          r.UNIT,
       uom:           r.UNIT,
       category:      r.CATEGORY,
+      prod_img:      r.PROD_IMG || null,
     }));
 }
 
