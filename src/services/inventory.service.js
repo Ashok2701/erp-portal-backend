@@ -122,59 +122,37 @@ exports.getSummary = async (user) => {
 // Uses adapter.getStock() → LEWISB.XSTDALN_STOCK (SQL Server / X3)
 // ================================================================
 async function getConsignment(adapter, ctx, filters) {
-  const customerCode = ctx.customerCode;
-  const site = ctx.site;
-  // Support multiple allowed sites
-  const sites = site ? [site] : [];
+  // Filter stock by customer's erp_entity_code as LOCATION + their allowed site
+  const stock = await adapter.getStock({
+    site:         ctx.site,
+    product:      filters.search   || null,
+    category:     filters.category || null,
+    warehouse:    ctx.customerCode || null,  // LOCATION = erp_entity_code
+  });
 
-  // Use dedicated consignment method that:
-  // 1. Filters XSTDALN_STOCK WHERE LOCATION = customerCode AND SITE IN sites
-  // 2. If no stock → checks STOLOC to determine correct error message
-  const { stock, locationExists } = await adapter.getConsignmentStock(customerCode, sites);
-
-  if (stock.length === 0) {
-    return {
-      rows: [],
-      empty: true,
-      reason: locationExists
-        ? 'no_products'       // location exists but no stock moved yet
-        : 'no_location',      // no consignment location created for customer
-      message: locationExists
-        ? 'No products are moved to your consignment location'
-        : 'No Consignment Location is created for this customer',
-    };
-  }
-
-  // Normalise column names + add computed status + allow order qty
-  const rows = stock
-    .filter(r => !filters.search || 
-      r.PRODUCT.toLowerCase().includes(filters.search.toLowerCase()) ||
-      (r.PROD_DESC || '').toLowerCase().includes(filters.search.toLowerCase()))
-    .map(r => ({
-      product_code:  r.PRODUCT,
-      product_desc:  r.PROD_DESC,
-      description:   r.PROD_DESC,
-      site:          r.SITE,
-      location:      r.LOCATION,
-      physical_qty:  Number(r.PHYSICAL_QTY)  || 0,
-      allocated_qty: Number(r.ALLOCATED_QTY) || 0,
-      consumed_qty:  Number(r.ALLOCATED_QTY) || 0,
-      available_qty: Number(r.AVAILABLE_QTY) || 0,
-      unit:          r.UNIT,
-      uom:           r.UNIT,
-      category:      r.CATEGORY,
-      order_qty:     0,
-      status: (() => {
-        const avail = Number(r.AVAILABLE_QTY) || 0;
-        const phys  = Number(r.PHYSICAL_QTY)  || 0;
-        if (phys === 0)   return 'Empty';
-        if (avail <= 0)   return 'Out';
-        if (avail < phys * 0.2) return 'Low';
-        return 'Active';
-      })(),
-    }));
-
-  return { rows, empty: false };
+  return stock.map(r => ({
+    product_code:  r.PRODUCT,
+    product_desc:  r.PROD_DESC,
+    description:   r.PROD_DESC,
+    site:          r.SITE,
+    location:      r.LOCATION,
+    physical_qty:  Number(r.PHYSICAL_QTY)  || 0,
+    allocated_qty: Number(r.ALLOCATED_QTY) || 0,
+    consumed_qty:  Number(r.ALLOCATED_QTY) || 0,
+    available_qty: Number(r.AVAILABLE_QTY) || 0,
+    unit:          r.UNIT,
+    uom:           r.UNIT,
+    category:      r.CATEGORY,
+    order_qty:     0,
+    status: (() => {
+      const avail = Number(r.AVAILABLE_QTY) || 0;
+      const phys  = Number(r.PHYSICAL_QTY)  || 0;
+      if (phys === 0)   return 'Empty';
+      if (avail <= 0)   return 'Out';
+      if (avail < phys * 0.2) return 'Low';
+      return 'Active';
+    })(),
+  }));
 }
 
 // ── Stock Movements drill-down ─────────────────────────────────
