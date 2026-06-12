@@ -121,6 +121,65 @@ exports.getSummary = async (user) => {
 // CONSIGNMENT — physical stock at user's site
 // Uses adapter.getStock() → LEWISB.XSTDALN_STOCK (SQL Server / X3)
 // ================================================================
+// ── Available Stock — warehouse stock filtered by site ────────
+async function getAvailable(adapter, ctx, filters) {
+  const stock = await adapter.getStock({
+    site:     ctx.site,
+    product:  filters.search   || null,
+    category: filters.category || null,
+  });
+
+  return stock
+    .filter(r => Number(r.AVAILABLE_QTY) > 0)
+    .map(r => ({
+      product_code:  r.PRODUCT,
+      product_desc:  r.PROD_DESC,
+      description:   r.PROD_DESC,
+      site:          r.SITE,
+      location:      r.LOCATION,
+      physical_qty:  Number(r.PHYSICAL_QTY)  || 0,
+      allocated_qty: Number(r.ALLOCATED_QTY) || 0,
+      available_qty: Number(r.AVAILABLE_QTY) || 0,
+      unit:          r.UNIT,
+      uom:           r.UNIT,
+      category:      r.CATEGORY,
+    }));
+}
+
+// ── Reserved — allocated stock ──────────────────────────────
+async function getReserved(adapter, ctx, filters) {
+  const stock = await adapter.getStock({
+    site:     ctx.site,
+    product:  filters.search   || null,
+    category: filters.category || null,
+  });
+
+  return stock
+    .filter(r => Number(r.ALLOCATED_QTY) > 0)
+    .map(r => ({
+      product_code:  r.PRODUCT,
+      product_desc:  r.PROD_DESC,
+      description:   r.PROD_DESC,
+      site:          r.SITE,
+      location:      r.LOCATION,
+      physical_qty:  Number(r.PHYSICAL_QTY)  || 0,
+      allocated_qty: Number(r.ALLOCATED_QTY) || 0,
+      available_qty: Number(r.AVAILABLE_QTY) || 0,
+      unit:          r.UNIT,
+      uom:           r.UNIT,
+      category:      r.CATEGORY,
+    }));
+}
+
+// ── Projected — future stock (consignment + in-transit) ──────
+async function getProjected(adapter, ctx, filters) {
+  const [consignment, inTransit] = await Promise.all([
+    getConsignment(adapter, ctx, filters),
+    getInTransit(adapter, ctx, filters),
+  ]);
+  return { consignment, inTransit };
+}
+
 async function getConsignment(adapter, ctx, filters) {
   // Filter stock by customer's erp_entity_code as LOCATION + their allowed site
   const stock = await adapter.getStock({
