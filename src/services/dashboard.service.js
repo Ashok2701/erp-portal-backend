@@ -149,8 +149,8 @@ exports.getCustomerStats = async (user) => {
   const user_id = user?.user_id;
   const [ordersRes, revenueRes] = await Promise.all([
     db.query(`SELECT status, COUNT(*) as count FROM sales_requests
-              WHERE user_id=$1 GROUP BY status`, [user_id]),
-    db.query(`SELECT COALESCE(SUM(total_amount),0) as total FROM sales_requests WHERE user_id=$1`, [user_id]),
+              WHERE user_id=$1::uuid GROUP BY status`, [user_id]),
+    db.query(`SELECT COALESCE(SUM(total_amount),0) as total FROM sales_requests WHERE user_id=$1::uuid`, [user_id]),
   ]);
   const byStatus = {};
   for (const row of ordersRes.rows) byStatus[(row.status||"").toLowerCase()] = Number(row.count);
@@ -210,21 +210,21 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
     approvalStatus
   ] = await Promise.all([
     // KPIs
-    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1 AND status IN ('CREATED','REQUEST_CREATED','Draft')`, [uid]),
-    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1 AND status='ORDER GENERATED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
-    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1 AND status='DELIVERY SCHEDULED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
-    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1 AND status='COMPLETED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
-    db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1 AND status IN ('CREATED','REQUEST_CREATED','Draft')`, [uid]),
-    db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1 AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
+    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status IN ('CREATED','REQUEST_CREATED','Draft')`, [uid]),
+    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status='ORDER GENERATED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
+    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status='DELIVERY SCHEDULED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
+    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status='COMPLETED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
+    db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1::uuid AND status IN ('CREATED','REQUEST_CREATED','Draft')`, [uid]),
+    db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1::uuid AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
     // Recent orders
     db.query(`SELECT sr.drop_request_id AS request_no, DATE(sr.request_date) AS date,
                      (SELECT COUNT(*) FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id) AS products_count,
                      sr.status, sr.erp_order_no AS so_number,
                      sr.request_date AS delivery_date, sr.total_amount AS amount
-              FROM sales_requests sr WHERE sr.user_id=$1
+              FROM sales_requests sr WHERE sr.user_id=$1::uuid
               ORDER BY sr.request_date DESC LIMIT 10`, [uid]),
     // Pipeline counts ALL time
-    db.query(`SELECT status, COUNT(*) FROM sales_requests WHERE user_id=$1 GROUP BY status`, [uid]),
+    db.query(`SELECT status, COUNT(*) FROM sales_requests WHERE user_id=$1::uuid GROUP BY status`, [uid]),
     // Unsigned legal documents
     db.query(`SELECT c.id AS content_id, c.title, ld.id AS legal_doc_id
               FROM content c
