@@ -202,11 +202,6 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
   const fromTs = `${dateFrom} 00:00:00`;
   const toTs   = `${dateTo}   23:59:59`;
 
-  // Get ERP adapter for X3 queries
-  const adapter = await ERPFactory.getERPAdapterForUser(user).catch(() => null);
-  const customerCode = dbUser.erp_entity_code;
-  const site         = dbUser.allowedsite;
-
   let openReq, salesOrders, dispatch, delivered,
       pendingPayments, totalAmount,
       recentOrders, pipeline,
@@ -220,24 +215,11 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
     unsignedDocs, unreadContent,
     approvalStatus
   ] = await Promise.all([
-    // KPIs — Open requests from portal sales_requests table
+    // KPIs from portal DB (reliable)
     db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status IN ('CREATED','REQUEST_CREATED','Draft')`, [uid]),
-    // Sales orders from X3 SORDER (pending/confirmed)
-    adapter
-      ? adapter.getAllOrders({ user: { erp_entity_code: customerCode, allowedsite: site } })
-          .then(rows => ({ rows: [{ count: rows.length }] })).catch(() => ({ rows: [{ count: 0 }] }))
-      : db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status='ORDER GENERATED'`, [uid]),
-    // Orders in dispatch from X3 SDELIVERY (open deliveries)
-    adapter
-      ? adapter.getAllDeliveries({ user: { erp_entity_code: customerCode, allowedsite: site }, inTransitOnly: true })
-          .then(rows => ({ rows: [{ count: rows.length }] })).catch(() => ({ rows: [{ count: 0 }] }))
-      : db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status='DELIVERY SCHEDULED'`, [uid]),
-    // Delivered — completed deliveries from X3
-    adapter
-      ? adapter.getAllDeliveries({ user: { erp_entity_code: customerCode, allowedsite: site } })
-          .then(rows => ({ rows: [{ count: rows.filter(r => r.status === 'Completed' || r.VCRSTA_0 === 2).length }] }))
-          .catch(() => ({ rows: [{ count: 0 }] }))
-      : db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status='COMPLETED'`, [uid]),
+    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status='ORDER GENERATED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
+    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status='DELIVERY SCHEDULED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
+    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status='COMPLETED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
     // Pending payments amount from portal
     db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1::uuid AND status IN ('CREATED','REQUEST_CREATED','Draft')`, [uid]),
     // Total amount this period from portal
