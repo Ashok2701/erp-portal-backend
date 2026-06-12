@@ -1475,36 +1475,28 @@ class SageX3Adapter extends BaseERPAdapter {
   async getInTransitStock(customerCode, sites) {
     const pool = await this.poolPromise;
 
-    const siteList = Array.isArray(sites) ? sites : [sites].filter(Boolean);
-    if (!customerCode || !siteList.length) return [];
+    if (!customerCode) return [];
 
     const request = pool.request();
     request.input('customerCode', sql.NVarChar, customerCode);
 
-    const siteParams = siteList.map((s, i) => {
-      request.input(`site${i}`, sql.VarChar, s);
-      return `@site${i}`;
-    }).join(',');
-
+    // Exact query confirmed working in X3 SQL Server
     const result = await request.query(`
       SELECT
         D.ITMREF_0        AS PRODUCT,
         D.ITMDES1_0       AS PROD_DESC,
-        S.STOFCY_0        AS SITE,
-        S.SDHNUM_0        AS DELIVERY_NO,
-        S.SOHNUM_0        AS SALES_ORDER_NO,
-        S.DLVDAT_0        AS EXPECTED_DATE,
+        D.SHIDAT_0        AS EXPECTED_DATE,
         D.QTY_0           AS QTY,
         D.SAU_0           AS UNIT,
+        D.SOHNUM_0        AS SALES_ORDER_NO,
+        S.SDHNUM_0        AS DELIVERY_NO,
+        S.STOFCY_0        AS SITE,
         S.BPCORD_0        AS CUSTOMER_CODE,
         S.BPDNAM_0        AS CUSTOMER_NAME
       FROM LEWISB.SDELIVERYD D
-      JOIN LEWISB.SDELIVERY  S ON S.SDHNUM_0 = D.SDHNUM_0
-      WHERE S.BPCORD_0  = @customerCode
-      AND   S.STOFCY_0  IN (${siteParams})
-      AND   S.VCRSTA_0  = 1
-      AND   D.QTY_0     > 0
-      ORDER BY S.DLVDAT_0 ASC
+      LEFT JOIN LEWISB.SDELIVERY S ON S.SDHNUM_0 = D.SDHNUM_0
+      WHERE S.BPCORD_0 = @customerCode
+      ORDER BY D.SHIDAT_0 ASC
     `);
 
     return result.recordset;
