@@ -1212,16 +1212,20 @@ class SageX3Adapter extends BaseERPAdapter {
 
     let query = `
       SELECT
-        PRODUCT,
-        PROD_DESC,
-        SITE,
-        PHYSICAL_QTY,
-        ALLOCATED_QTY,
-        AVAILABLE_QTY,
-        UNIT,
-        LOCATION,
-        CATEGORY
-      FROM LEWISB.XSTDALN_STOCK
+        S.PRODUCT,
+        S.PROD_DESC,
+        S.SITE,
+        S.PHYSICAL_QTY,
+        S.ALLOCATED_QTY,
+        S.AVAILABLE_QTY,
+        S.UNIT,
+        S.LOCATION,
+        S.CATEGORY,
+        C.BLOB_0 AS PROD_IMG
+      FROM LEWISB.XSTDALN_STOCK S
+      LEFT JOIN LEWISB.CBLOB C
+        ON  S.PRODUCT   = C.IDENT1_0
+        AND C.CODBLB_0  = 'ITM'
       WHERE 1=1
     `;
 
@@ -1229,22 +1233,22 @@ class SageX3Adapter extends BaseERPAdapter {
 
     // Dynamic site filter
     if (filters.site) {
-      query += ` AND SITE = @site`;
+      query += ` AND S.SITE = @site`;
       request.input("site", sql.VarChar, filters.site);
     }
 
     if (filters.product) {
-      query += ` AND (PRODUCT LIKE @product OR PROD_DESC LIKE @product)`;
+      query += ` AND (S.PRODUCT LIKE @product OR S.PROD_DESC LIKE @product)`;
       request.input("product", sql.VarChar, `%${filters.product}%`);
     }
 
     if (filters.warehouse) {
-      query += ` AND LOCATION = @warehouse`;
+      query += ` AND S.LOCATION = @warehouse`;
       request.input("warehouse", sql.VarChar, filters.warehouse);
     }
 
     if (filters.category) {
-      query += ` AND CATEGORY = @category`;
+      query += ` AND S.CATEGORY = @category`;
       request.input("category", sql.VarChar, filters.category);
     }
 
