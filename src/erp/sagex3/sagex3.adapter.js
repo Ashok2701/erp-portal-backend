@@ -1253,7 +1253,7 @@ class SageX3Adapter extends BaseERPAdapter {
       query += `
         AND LOCATION IN (
           SELECT LOC_0
-          FROM LEWISB.LOCATION
+          FROM tbs.LEWISB.LOCATION
           WHERE BPCNUM_0 = @customerCode
           AND   LOCTYP_0 = 3
         )
@@ -1266,7 +1266,7 @@ class SageX3Adapter extends BaseERPAdapter {
     if (filters.excludeCustomerLocations) {
       query += `
         AND LOCATION NOT IN (
-          SELECT LOC_0 FROM LEWISB.LOCATION WHERE LOCTYP_0 = 3
+          SELECT LOC_0 FROM tbs.LEWISB.LOCATION WHERE LOCTYP_0 = 3
         )
       `;
     }
