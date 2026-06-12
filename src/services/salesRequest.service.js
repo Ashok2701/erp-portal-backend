@@ -371,21 +371,18 @@ exports.generateOrder = async (user, requestIds) => {
       throw new Error("WSDL URL not configured. Please set x3_wsdl_url in tenant settings.");
     }
 
-    // Force HTTP if URL uses HTTPS — X3 classic web services often run on plain HTTP
-    const effectiveUrl = wsdlUrl.replace(/^https:\/\//, 'http://');
-    console.log("[SOAP] WSDL URL:", effectiveUrl);
+    console.log("[SOAP] WSDL URL:", wsdlUrl);
     console.log("[SOAP] Pool alias:", freshSettings?.x3_pool_alias || settings?.x3_pool_alias);
 
     const client = await soap.createClientAsync(
-      effectiveUrl,
+      wsdlUrl,
       {
         attributesKey: "attributes",
         valueKey: "$value",
         xmlKey: "$xml",
         wsdl_options: {
-          httpClient: { timeout: 30000 },
+          httpsAgent: new https.Agent({ rejectUnauthorized: false }),
         },
-        endpoint: effectiveUrl.replace('?wsdl', ''),
       }
     );
 
