@@ -578,13 +578,14 @@ class SageX3Adapter extends BaseERPAdapter {
         A.VOL_0,
         A.VOU_0,
         C.BPTNAM_0,
-        F.FCYNAM_0        AS SITE_DESC,
-        BP.BPCZIPCODE_0   AS ZIP_CODE,
-        BP.BPCCTY_0       AS CITY,
-        BP.BPASTN_0       AS CUSTOMER_NAME
+        F.FCYNAM_0       AS SITE_DESC,
+        BP.BPCZIPCODE_0  AS ZIP_CODE,
+        BP.BPCCTY_0      AS CITY,
+        BP.BPASTN_0      AS CUSTOMER_NAME
       FROM LEWISB.SDELIVERY A
-      LEFT JOIN tbs.LEWISB.BPCARRIER C
-        ON A.BPTNUM_0 = C.BPTNUM_0
+      LEFT JOIN tbs.LEWISB.BPCARRIER C   ON A.BPTNUM_0 = C.BPTNUM_0
+      LEFT JOIN tbs.LEWISB.FACILITY F    ON A.STOFCY_0 = F.FCY_0
+      LEFT JOIN tbs.LEWISB.BPCUSTOMER BP ON A.BPCORD_0 = BP.BPCNUM_0
       WHERE 1=1
     `;
 
@@ -722,16 +723,15 @@ class SageX3Adapter extends BaseERPAdapter {
         A.SHIDAT_0,
         A.ALLSTA_0,
         A.INVSTA_0,
-        A.TSTSOH_0,
         C.BPTNAM_0,
-        F.FCYNAM_0        AS SITE_DESC,
-        BP.BPCZIPCODE_0   AS ZIP_CODE,
-        BP.BPCCTY_0       AS CITY,
-        BP.BPASTN_0       AS CUSTOMER_NAME
+        F.FCYNAM_0       AS SITE_DESC,
+        BP.BPCZIPCODE_0  AS ZIP_CODE,
+        BP.BPCCTY_0      AS CITY,
+        BP.BPASTN_0      AS CUSTOMER_NAME
       FROM tbs.LEWISB.SORDER A
-      LEFT JOIN tbs.LEWISB.BPCARRIER C ON A.BPTNUM_0 = C.BPTNUM_0
-      LEFT JOIN LEWISB.FACILITY F      ON A.SALFCY_0 = F.FCY_0
-      LEFT JOIN LEWISB.BPCUSTOMER BP   ON A.BPCORD_0 = BP.BPCNUM_0
+      LEFT JOIN tbs.LEWISB.BPCARRIER C   ON A.BPTNUM_0 = C.BPTNUM_0
+      LEFT JOIN tbs.LEWISB.FACILITY F    ON A.SALFCY_0 = F.FCY_0
+      LEFT JOIN tbs.LEWISB.BPCUSTOMER BP ON A.BPCORD_0 = BP.BPCNUM_0
       WHERE 1=1
     `;
 
@@ -864,13 +864,13 @@ class SageX3Adapter extends BaseERPAdapter {
         A.AMTNOT_0,
         A.STA_0,
         A.FCY_0,
-        F.FCYNAM_0        AS SITE_DESC,
-        BP.BPCZIPCODE_0   AS ZIP_CODE,
-        BP.BPCCTY_0       AS CITY,
-        BP.BPASTN_0       AS CUSTOMER_NAME
+        F.FCYNAM_0       AS SITE_DESC,
+        BP.BPCZIPCODE_0  AS ZIP_CODE,
+        BP.BPCCTY_0      AS CITY,
+        BP.BPASTN_0      AS CUSTOMER_NAME
       FROM tbs.LEWISB.SINVOICE A
-      LEFT JOIN LEWISB.FACILITY F    ON A.FCY_0   = F.FCY_0
-      LEFT JOIN LEWISB.BPCUSTOMER BP ON A.BPR_0   = BP.BPCNUM_0
+      LEFT JOIN tbs.LEWISB.FACILITY F    ON A.FCY_0 = F.FCY_0
+      LEFT JOIN tbs.LEWISB.BPCUSTOMER BP ON A.BPR_0  = BP.BPCNUM_0
       WHERE 1=1
     `;
 
@@ -1523,46 +1523,18 @@ class SageX3Adapter extends BaseERPAdapter {
   }
 
 
-  // ── Dashboard KPIs from X3 ───────────────────────────────────────────────
   async getDashboardKPIs(customerCode, site) {
     const pool = await this.poolPromise;
-    const request = pool.request();
-    request.input('customerCode', sql.NVarChar, customerCode);
-    request.input('site', sql.VarChar, site || '');
-
-    const result = await request.query(`
+    const req = pool.request();
+    req.input('customerCode', sql.NVarChar, customerCode);
+    req.input('site', sql.VarChar, site || '');
+    const result = await req.query(`
       SELECT
-        (SELECT COUNT(*) FROM tbs.LEWISB.SORDER
-         WHERE BPCORD_0 = @customerCode AND SALFCY_0 = @site) AS total_orders,
-
-        (SELECT COUNT(*) FROM tbs.LEWISB.SORDER
-         WHERE BPCORD_0 = @customerCode AND SALFCY_0 = @site
-         AND ALLSTA_0 IN (1,2)) AS pending_orders,
-
-        (SELECT COUNT(*) FROM tbs.LEWISB.SORDER
-         WHERE BPCORD_0 = @customerCode AND SALFCY_0 = @site
-         AND ALLSTA_0 = 3) AS orders_in_dispatch,
-
-        (SELECT COUNT(*) FROM LEWISB.SDELIVERY
-         WHERE BPCORD_0 = @customerCode AND STOFCY_0 = @site) AS total_deliveries,
-
-        (SELECT COUNT(*) FROM LEWISB.SDELIVERY
-         WHERE BPCORD_0 = @customerCode AND STOFCY_0 = @site
-         AND VCRSTA_0 = 1) AS pending_deliveries,
-
-        (SELECT COUNT(*) FROM LEWISB.SDELIVERY
-         WHERE BPCORD_0 = @customerCode AND STOFCY_0 = @site
-         AND VCRSTA_0 = 2) AS delivered,
-
-        (SELECT COUNT(*) FROM tbs.LEWISB.SINVOICE
-         WHERE BPCORD_0 = @customerCode AND FCY_0 = @site
-         AND DUDDAT_0 >= GETDATE()) AS pending_invoices,
-
-        (SELECT COALESCE(SUM(AMTATI_0),0) FROM tbs.LEWISB.SINVOICE
-         WHERE BPCORD_0 = @customerCode AND FCY_0 = @site
-         AND DUDDAT_0 >= GETDATE()) AS pending_amount
+        (SELECT COUNT(*) FROM tbs.LEWISB.SORDER   WHERE BPCORD_0=@customerCode AND SALFCY_0=@site) AS total_orders,
+        (SELECT COUNT(*) FROM tbs.LEWISB.SORDER   WHERE BPCORD_0=@customerCode AND SALFCY_0=@site AND ALLSTA_0 IN (1,2)) AS pending_orders,
+        (SELECT COUNT(*) FROM LEWISB.SDELIVERY    WHERE BPCORD_0=@customerCode AND STOFCY_0=@site AND VCRSTA_0=1) AS orders_in_dispatch,
+        (SELECT COUNT(*) FROM LEWISB.SDELIVERY    WHERE BPCORD_0=@customerCode AND STOFCY_0=@site AND VCRSTA_0=2) AS delivered
     `);
-
     return result.recordset[0] || {};
   }
 
