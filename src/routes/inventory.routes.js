@@ -12,6 +12,6 @@ router.get("/overview",    auth, ctrl.getInventorySummary);  // alias
 router.get("/network",     auth, ctrl.getNetwork);               // cross-site stock
 router.get("/availability",auth, ctrl.getInventory);         // alias → ?view=available
 router.get("/movements",   auth, ctrl.getMovements);          // stock transaction movements
-router.get("/requests",    auth, ctrl.getInventorySummary);  // alias → summary (pending requests)
+router.get("/requests",    auth, ctrl.getStockRequests);     // sales_requests for logged-in user
 
 module.exports = router;
