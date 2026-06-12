@@ -202,7 +202,13 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
   const fromTs = `${dateFrom} 00:00:00`;
   const toTs   = `${dateTo}   23:59:59`;
 
-  const [
+  let openReq, salesOrders, dispatch, delivered,
+      pendingPayments, totalAmount,
+      recentOrders, pipeline,
+      unsignedDocs, unreadContent,
+      approvalStatus;
+  try {
+  [
     openReq, salesOrders, dispatch, delivered,
     pendingPayments, totalAmount,
     recentOrders, pipeline,
@@ -230,8 +236,8 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
               FROM content c
               JOIN legal_documents ld ON ld.id=c.legal_document_id
               WHERE c.type='DOCUMENT'
-              AND EXISTS (SELECT 1 FROM content_targets ct WHERE ct.content_id=c.id AND (ct.target_value=$1::text OR ct.target_value=( SELECT role_id::text FROM user_roles WHERE user_id=$1 LIMIT 1) OR ct.target_type='ALL'))
-              AND NOT EXISTS (SELECT 1 FROM user_signed_documents usd WHERE usd.user_id=$1 AND usd.legal_document_id=ld.id)
+              AND EXISTS (SELECT 1 FROM content_targets ct WHERE ct.content_id=c.id AND (ct.target_value=$1::text OR ct.target_value=( SELECT role_id::text FROM user_roles WHERE user_id=$1::uuid LIMIT 1) OR ct.target_type='ALL'))
+              AND NOT EXISTS (SELECT 1 FROM user_signed_documents usd WHERE usd.user_id=$1::uuid AND usd.legal_document_id=ld.id)
               LIMIT 5`, [uid]),
     // Recent content (offers, announcements, messages) targeted to this user
     db.query(`SELECT c.id, c.title, c.type, c.message, c.priority, c.created_at
@@ -239,12 +245,22 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
               JOIN content_targets ct ON ct.content_id=c.id
               WHERE c.type IN ('OFFER','ANNOUNCEMENT','MESSAGE')
               AND (ct.target_value=$1::text OR ct.target_type='ALL'
-                   OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$1))
+                   OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$1::uuid))
               AND c.created_at >= NOW() - INTERVAL '30 days'
               ORDER BY c.created_at DESC LIMIT 8`, [uid]),
     // Account status
-    db.query(`SELECT status FROM users WHERE user_id=$1`, [uid]),
+    db.query(`SELECT status FROM users WHERE user_id=$1::uuid`, [uid]),
   ]);
+  } catch (qErr) {
+    console.error('Dashboard query error:', qErr.message);
+    // Return safe empty state instead of crashing
+    return {
+      kpis: { open_requests:0, sales_orders:0, orders_in_dispatch:0, delivered:0, pending_payments:0, total_amount:0 },
+      pipeline: [], recent_orders: [], pending_actions: [], notifications: [],
+      unsigned_docs: [], unread_content: [], account_status: 'active',
+      _error: qErr.message
+    };
+  }
 
   // Build pipeline stages
   const statusMap = {};
