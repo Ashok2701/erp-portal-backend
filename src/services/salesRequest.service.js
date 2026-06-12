@@ -360,28 +360,17 @@ exports.generateOrder = async (user, requestIds) => {
     // CREATE SOAP CLIENT
     // ============================================
 
-    // Resolve WSDL URL — clear cache to pick up DB changes
-    const TenantSettingsModel = require("../models/tenantSettings.model");
-    TenantSettingsModel.clearCache(user.tenant_id);
-    const freshSettings = await TenantSettingsModel.getTenantSettings(user.tenant_id);
-    
-    const wsdlUrl = freshSettings?.x3_wsdl_url || settings?.x3_wsdl_url || process.env.X3_WSDL_URL;
-    
-    if (!wsdlUrl) {
-      throw new Error("WSDL URL not configured. Please set x3_wsdl_url in tenant settings.");
-    }
-
-    console.log("[SOAP] WSDL URL:", wsdlUrl);
-    console.log("[SOAP] Pool alias:", freshSettings?.x3_pool_alias || settings?.x3_pool_alias);
-
     const client = await soap.createClientAsync(
-      wsdlUrl,
+      settings?.x3_wsdl_url || process.env.X3_WSDL_URL,
       {
         attributesKey: "attributes",
         valueKey: "$value",
         xmlKey: "$xml",
+
         wsdl_options: {
-          httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+          httpsAgent: new https.Agent({
+            rejectUnauthorized: false,
+          }),
         },
       }
     );
