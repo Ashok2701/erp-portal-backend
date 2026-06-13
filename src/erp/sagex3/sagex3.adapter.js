@@ -838,10 +838,12 @@ class SageX3Adapter extends BaseERPAdapter {
             C.ITMDES_0,
             A.QTY_0,
             A.DLVQTY_0,
+            A.SAU_0        AS UNIT,
             C.NETPRIATI_0
           FROM tbs.LEWISB.SORDERQ A
           LEFT JOIN tbs.LEWISB.SORDERP C
             ON A.SOHNUM_0 = C.SOHNUM_0
+            AND A.SOPLIN_0 = C.SOPLIN_0
           WHERE A.SOHNUM_0=@orderNo
         `);
 
