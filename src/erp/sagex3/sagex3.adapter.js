@@ -579,11 +579,15 @@ class SageX3Adapter extends BaseERPAdapter {
         A.VOU_0,
         C.BPTNAM_0,
         F.FCYNAM_0       AS SITE_DESC,
-        BP.BPCNAM_0      AS CUSTOMER_FULL_NAME
+        BP.BPCNAM_0      AS CUSTOMER_FULL_NAME,
+        BA.POSCOD_0      AS ZIP_CODE,
+        BA.CTY_0         AS CITY
       FROM LEWISB.SDELIVERY A
       LEFT JOIN tbs.LEWISB.BPCARRIER C   ON A.BPTNUM_0 = C.BPTNUM_0
       LEFT JOIN tbs.LEWISB.FACILITY F    ON A.STOFCY_0 = F.FCY_0
       LEFT JOIN tbs.LEWISB.BPCUSTOMER BP ON A.BPCORD_0 = BP.BPCNUM_0
+      LEFT JOIN LEWISB.BPADDRESS BA      ON BA.BPANUM_0 = A.BPCORD_0
+                                        AND BA.BPAADD_0 = 'AD1'
       WHERE 1=1
     `;
 
@@ -723,11 +727,15 @@ class SageX3Adapter extends BaseERPAdapter {
         A.INVSTA_0,
         C.BPTNAM_0,
         F.FCYNAM_0       AS SITE_DESC,
-        BP.BPCNAM_0      AS CUSTOMER_FULL_NAME
+        BP.BPCNAM_0      AS CUSTOMER_FULL_NAME,
+        BA.POSCOD_0      AS ZIP_CODE,
+        BA.CTY_0         AS CITY
       FROM tbs.LEWISB.SORDER A
       LEFT JOIN tbs.LEWISB.BPCARRIER C   ON A.BPTNUM_0 = C.BPTNUM_0
       LEFT JOIN tbs.LEWISB.FACILITY F    ON A.SALFCY_0 = F.FCY_0
       LEFT JOIN tbs.LEWISB.BPCUSTOMER BP ON A.BPCORD_0 = BP.BPCNUM_0
+      LEFT JOIN LEWISB.BPADDRESS BA      ON BA.BPANUM_0 = A.BPCORD_0
+                                        AND BA.BPAADD_0 = 'AD1'
       WHERE 1=1
     `;
 
@@ -861,10 +869,14 @@ class SageX3Adapter extends BaseERPAdapter {
         A.STA_0,
         A.FCY_0,
         F.FCYNAM_0       AS SITE_DESC,
-        BP.BPCNAM_0      AS CUSTOMER_FULL_NAME
+        BP.BPCNAM_0      AS CUSTOMER_FULL_NAME,
+        BA.POSCOD_0      AS ZIP_CODE,
+        BA.CTY_0         AS CITY
       FROM tbs.LEWISB.SINVOICE A
-      LEFT JOIN tbs.LEWISB.FACILITY F    ON A.FCY_0 = F.FCY_0
+      LEFT JOIN tbs.LEWISB.FACILITY F    ON A.FCY_0  = F.FCY_0
       LEFT JOIN tbs.LEWISB.BPCUSTOMER BP ON A.BPR_0  = BP.BPCNUM_0
+      LEFT JOIN LEWISB.BPADDRESS BA      ON BA.BPANUM_0 = A.BPR_0
+                                        AND BA.BPAADD_0 = 'AD1'
       WHERE 1=1
     `;
 
