@@ -349,13 +349,14 @@ class SageX3Adapter extends BaseERPAdapter {
 
     const query = `
       SELECT
-        BPAADD_0 AS address_code,
-        BPADES_0 AS address_name,
+        BPAADD_0    AS address_code,
+        BPADES_0    AS address_name,
         BPAADDLIG_0 AS address_line1,
         BPAADDLIG_1 AS address_line2,
         BPAADDLIG_2 AS address_line3,
-        CTY_0 AS city,
-        CRYNAM_0 AS country
+        POSCOD_0    AS postal_code,
+        CTY_0       AS city,
+        CRYNAM_0    AS country
       FROM LEWISB.BPADDRESS
       WHERE BPANUM_0 = @customerCode
     `;
