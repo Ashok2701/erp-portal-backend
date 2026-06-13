@@ -572,8 +572,8 @@ class SageX3Adapter extends BaseERPAdapter {
         A.SDHTYP_0,
         A.SDHNUM_0,
         A.DSPTOTQTY_0,
-        DLVNOT_0 AS BEFORETAXAMOUNT,
-        DLVATI_0 AS AFTERTAXAMOUNT
+        A.DLVNOT_0 AS BEFORETAXAMOUNT,
+        A.DLVATI_0 AS AFTERTAXAMOUNT,
         A.DLVDAT_0,
         A.SHIDAT_0,
         A.GROWEI_0,
