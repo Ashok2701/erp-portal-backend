@@ -33,6 +33,7 @@ exports.getStockRequests = async (req, res) => {
          u.username            AS requested_by,
          u.full_name,
          u.allowedsite         AS site,
+         u.erp_entity_code     AS customer_code,
          (SELECT COUNT(*)   FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id) AS item_count,
          (SELECT sri.product_code FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id ORDER BY sri.id LIMIT 1) AS first_product_code,
          (SELECT sri.prod_desc   FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id ORDER BY sri.id LIMIT 1) AS first_product_name,
@@ -59,7 +60,10 @@ exports.getStockRequests = async (req, res) => {
       product_codes: r.first_product_code || "",
       from_location: r.site || "",
       to_location:   "",
+      site:          r.site || "",
+      customer_code: r.customer_code || "",
       requested_by:  r.full_name || r.requested_by,
+      customer_name: r.full_name || "",
       requested_on:  r.request_date || r.created_time,
       request_date:  r.request_date || r.created_time,
       needed_by:     null,
@@ -67,6 +71,33 @@ exports.getStockRequests = async (req, res) => {
       note:          r.notes || "",
       uom:           "Units",
     }));
+
+    // Enrich with address data from X3 (zip, city, site_desc)
+    try {
+      const ERPFactory = require('../erp/erp.factory');
+      const adapter = await ERPFactory.getERPAdapterForUser(req.user);
+      // Get unique customer codes
+      const codes = [...new Set(rows.map(r => r.customer_code).filter(Boolean))];
+      const addrMap = {};
+      for (const code of codes) {
+        const addrs = await adapter.getCustomerAddresses(code).catch(() => []);
+        const addr = addrs.find(a => a.address_code === 'AD1') || addrs[0];
+        if (addr) addrMap[code] = addr;
+      }
+      // Get site descriptions
+      const sites = await adapter.getAllSites().catch(() => []);
+      const siteMap = {};
+      sites.forEach(s => { siteMap[s.SITE] = s.DESCR; });
+      // Merge into rows
+      rows.forEach(r => {
+        const addr = addrMap[r.customer_code];
+        if (addr) {
+          r.del_zip  = addr.POSCOD_0 || addr.postal_code || '';
+          r.del_city = addr.city || addr.CTY_0 || '';
+        }
+        if (r.site && siteMap[r.site]) r.site_desc = siteMap[r.site];
+      });
+    } catch (e) { /* non-critical — skip enrichment */ }
 
     res.json({ success: true, data: rows });
   } catch (err) {
