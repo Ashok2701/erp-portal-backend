@@ -572,6 +572,8 @@ class SageX3Adapter extends BaseERPAdapter {
         A.SDHTYP_0,
         A.SDHNUM_0,
         A.DSPTOTQTY_0,
+        DLVNOT_0 AS BEFORETAXAMOUNT,
+        DLVATI_0 AS AFTERTAXAMOUNT
         A.DLVDAT_0,
         A.SHIDAT_0,
         A.GROWEI_0,
@@ -588,7 +590,7 @@ class SageX3Adapter extends BaseERPAdapter {
       LEFT JOIN tbs.LEWISB.FACILITY F    ON A.STOFCY_0 = F.FCY_0
       LEFT JOIN tbs.LEWISB.BPCUSTOMER BP ON A.BPCORD_0 = BP.BPCNUM_0
       LEFT JOIN LEWISB.BPADDRESS BA      ON BA.BPANUM_0 = A.BPCORD_0
-                                        AND BA.BPAADD_0 = 'AD1'
+                                        AND BA.BPAADD_0 = A.BPAADD_0
       WHERE 1=1
     `;
 
@@ -723,6 +725,8 @@ class SageX3Adapter extends BaseERPAdapter {
         A.SOHNUM_0,
         A.SOHTYP_0,
         A.ORDDAT_0,
+        ORDNOT_0 AS BEFORETAXAMOUNT,
+        ORDATI_0 AS AFTERTAXAMOUNT,
         A.SHIDAT_0,
         A.ALLSTA_0,
         A.INVSTA_0,
@@ -736,7 +740,7 @@ class SageX3Adapter extends BaseERPAdapter {
       LEFT JOIN tbs.LEWISB.FACILITY F    ON A.SALFCY_0 = F.FCY_0
       LEFT JOIN tbs.LEWISB.BPCUSTOMER BP ON A.BPCORD_0 = BP.BPCNUM_0
       LEFT JOIN LEWISB.BPADDRESS BA      ON BA.BPANUM_0 = A.BPCORD_0
-                                        AND BA.BPAADD_0 = 'AD1'
+                                        AND BA.BPAADD_0 =A.BPAADD_0
       WHERE 1=1
     `;
 
