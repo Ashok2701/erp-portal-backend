@@ -1,6 +1,8 @@
 "use strict";
-const db      = require("../config/db");
+const db         = require("../config/db");
 const ERPFactory = require("../erp/erp.factory");
+const mssql      = require("mssql");
+const sql        = mssql;
 
 // ================================================================
 // ADMIN DASHBOARD — full data for AdminDashboard.jsx
@@ -31,34 +33,29 @@ exports.getAdminStats = async (user) => {
     db.query("SELECT COUNT(*) FROM sales_requests WHERE status='CREATED' AND user_id IN (SELECT user_id FROM users WHERE tenant_id=$1)", [tenant_id]),
     db.query(`SELECT status, COUNT(*) FROM sales_requests
               WHERE user_id IN (SELECT user_id FROM users WHERE tenant_id=$1) GROUP BY status`, [tenant_id]),
-    // Activity feed data
     db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND created_at >= NOW()-INTERVAL '7 days'`, [tenant_id]),
     db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='IN_VERIFICATION'`, [tenant_id]),
     db.query(`SELECT COUNT(*) FROM users WHERE tenant_id=$1 AND status='PENDING_APPROVAL'`, [tenant_id]),
-    // Recent signups (last 10)
     db.query(`SELECT username, full_name, email, status, created_at
               FROM users WHERE tenant_id=$1
               ORDER BY created_at DESC LIMIT 10`, [tenant_id]),
-    // Recent orders (last 10)
     db.query(`SELECT sr.drop_request_id, u.username, u.full_name,
                      sr.total_amount, sr.status, sr.created_time
               FROM sales_requests sr
               JOIN users u ON u.user_id=sr.user_id
               WHERE u.tenant_id=$1
               ORDER BY sr.created_time DESC LIMIT 10`, [tenant_id]),
-    // Recent document signings
     db.query(`SELECT usd.signed_at, usd.username, ld.title AS doc_title
               FROM user_signed_documents usd
               JOIN legal_documents ld ON ld.id=usd.legal_document_id
               WHERE ld.tenant_id=$1
               ORDER BY usd.signed_at DESC LIMIT 10`, [tenant_id]),
-    // Unread/unprocessed content messages
     db.query(`SELECT COUNT(*) FROM content
               WHERE tenant_id=$1 AND type='MESSAGE'
               AND created_at >= NOW()-INTERVAL '7 days'`, [tenant_id]),
   ]);
 
-  // ERP stats — race with 3s timeout so slow X3 never blocks dashboard
+  // ERP stats — race with 3s timeout
   let products = [], categories = [];
   try {
     const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
@@ -72,7 +69,6 @@ exports.getAdminStats = async (user) => {
     [products, categories] = await Promise.race([erpFetch, timeout]);
   } catch (_) {}
 
-  // Build unified activity feed sorted by time
   const activityFeed = [];
   for (const r of recentSignups.rows.slice(0, 5)) {
     activityFeed.push({ type: "signup", icon: "user-plus", color: "blue",
@@ -91,8 +87,6 @@ exports.getAdminStats = async (user) => {
   }
   activityFeed.sort((a,b) => new Date(b.time) - new Date(a.time));
 
-  // User lifecycle funnel
-  // Funnel queries merged with a single efficient query
   const funnelRes = await db.query(
     `SELECT status, COUNT(*) FROM users WHERE tenant_id=$1
      AND status IN ('CREATED','IN_VERIFICATION','PENDING_APPROVAL','ACTIVE','REJECTED')
@@ -100,13 +94,6 @@ exports.getAdminStats = async (user) => {
     [tenant_id]
   );
   const funnelMap = Object.fromEntries(funnelRes.rows.map(r => [r.status, Number(r.count)]));
-  const [fCreated, fVerif, fPendApproval, fActive, fRejected] = [
-    { rows: [{ count: funnelMap['CREATED'] || 0 }] },
-    { rows: [{ count: funnelMap['IN_VERIFICATION'] || 0 }] },
-    { rows: [{ count: funnelMap['PENDING_APPROVAL'] || 0 }] },
-    { rows: [{ count: funnelMap['ACTIVE'] || 0 }] },
-    { rows: [{ count: funnelMap['REJECTED'] || 0 }] },
-  ];
 
   return {
     users: {
@@ -132,18 +119,18 @@ exports.getAdminStats = async (user) => {
       new_messages:          Number(unreadMessages.rows[0].count),
     },
     lifecycle_funnel: [
-      { stage: "Signed Up",        count: Number(fCreated.rows[0].count),     color: "blue"   },
-      { stage: "Docs Sent",        count: Number(fVerif.rows[0].count),       color: "amber"  },
-      { stage: "Docs Signed",      count: Number(fPendApproval.rows[0].count),color: "violet" },
-      { stage: "Active",           count: Number(fActive.rows[0].count),      color: "emerald"},
-      { stage: "Rejected",         count: Number(fRejected.rows[0].count),    color: "rose"   },
+      { stage: "Signed Up",   count: funnelMap['CREATED']          || 0, color: "blue"   },
+      { stage: "Docs Sent",   count: funnelMap['IN_VERIFICATION']   || 0, color: "amber"  },
+      { stage: "Docs Signed", count: funnelMap['PENDING_APPROVAL']  || 0, color: "violet" },
+      { stage: "Active",      count: funnelMap['ACTIVE']            || 0, color: "emerald"},
+      { stage: "Rejected",    count: funnelMap['REJECTED']          || 0, color: "rose"   },
     ],
     activity_feed: activityFeed.slice(0, 15),
   };
 };
 
 // ================================================================
-// CUSTOMER STATS  — /dashboard/stats  (Dashboard.jsx)
+// CUSTOMER STATS  — /dashboard/stats  (Dashboard.jsx legacy)
 // ================================================================
 exports.getCustomerStats = async (user) => {
   const user_id = user?.user_id;
@@ -153,8 +140,8 @@ exports.getCustomerStats = async (user) => {
     db.query(`SELECT COALESCE(SUM(total_amount),0) as total FROM sales_requests WHERE user_id=$1::uuid`, [user_id]),
   ]);
   const byStatus = {};
-  for (const row of ordersRes.rows) byStatus[(row.status||"").toLowerCase()] = Number(row.count);
-  const total_orders  = ordersRes.rows.reduce((s,r) => s + Number(r.count), 0);
+  for (const row of ordersRes.rows) byStatus[(row.status || "").toLowerCase()] = Number(row.count);
+  const total_orders = ordersRes.rows.reduce((s,r) => s + Number(r.count), 0);
   return {
     success: true,
     data: {
@@ -170,7 +157,7 @@ exports.getCustomerStats = async (user) => {
 };
 
 // ================================================================
-// CUSTOMER DASHBOARD  — /dashboard/customer  (DashboardKPIPanel)
+// CUSTOMER DASHBOARD — /dashboard/customer  (DashboardKPIPanel)
 // ================================================================
 exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
   const now = new Date();
@@ -178,15 +165,14 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
   if (!dateFrom || !dateTo) {
     if (preset === "this_week") {
       const day = now.getDay() || 7;
-      const mon = new Date(now); mon.setDate(now.getDate() - (day-1));
-      dateFrom = mon.toISOString().slice(0,10);
-      dateTo   = now.toISOString().slice(0,10);
+      const mon = new Date(now); mon.setDate(now.getDate() - (day - 1));
+      dateFrom = mon.toISOString().slice(0, 10);
+      dateTo   = now.toISOString().slice(0, 10);
     } else if (preset === "this_month") {
-      dateFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10);
-      dateTo   = now.toISOString().slice(0,10);
+      dateFrom = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
+      dateTo   = now.toISOString().slice(0, 10);
     } else {
-      // today
-      dateFrom = dateTo = now.toISOString().slice(0,10);
+      dateFrom = dateTo = now.toISOString().slice(0, 10);
     }
   }
 
@@ -198,95 +184,213 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
   if (!userRes.rows.length) throw new Error("User not found");
   const dbUser = userRes.rows[0];
   const uid    = dbUser.user_id;
+  const customerCode = dbUser.erp_entity_code || null;
 
   const fromTs = `${dateFrom} 00:00:00`;
   const toTs   = `${dateTo}   23:59:59`;
 
-  let openReq, salesOrders, dispatch, delivered,
-      pendingPayments, totalAmount,
-      recentOrders, pipeline,
-      unsignedDocs, unreadContent,
-      approvalStatus;
+  // ── 1. Portal DB queries (always available) ──────────────────────
+  let openReq, recentOrders, pipeline, unsignedDocs, unreadContent, approvalStatus;
   try {
-  [
-    openReq, salesOrders, dispatch, delivered,
-    pendingPayments, totalAmount,
-    recentOrders, pipeline,
-    unsignedDocs, unreadContent,
-    approvalStatus
-  ] = await Promise.all([
-    // KPIs from portal DB (reliable)
-    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status IN ('CREATED','REQUEST_CREATED','Draft')`, [uid]),
-    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status='ORDER GENERATED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
-    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status='DELIVERY SCHEDULED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
-    db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND status='COMPLETED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
-    // Pending payments amount from portal
-    db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1::uuid AND status IN ('CREATED','REQUEST_CREATED','Draft')`, [uid]),
-    // Total amount this period from portal
-    db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1::uuid AND request_date BETWEEN $2 AND $3`, [uid, fromTs, toTs]),
-    // Recent requests — from portal sales_requests
-    db.query(`SELECT sr.drop_request_id AS request_no, DATE(sr.request_date) AS date,
-                     (SELECT COUNT(*) FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id) AS products_count,
-                     sr.status, sr.erp_order_no AS so_number,
-                     sr.request_date AS delivery_date, sr.total_amount AS amount
-              FROM sales_requests sr WHERE sr.user_id=$1::uuid
-              ORDER BY sr.request_date DESC LIMIT 10`, [uid]),
-    // Pipeline — from portal sales_requests
-    db.query(`SELECT status, COUNT(*) FROM sales_requests WHERE user_id=$1::uuid GROUP BY status`, [uid]),
-    // Unsigned legal documents
-    db.query(`SELECT c.id AS content_id, c.title, ld.id AS legal_doc_id
-              FROM content c
-              JOIN legal_documents ld ON ld.id=c.legal_document_id
-              WHERE c.type='DOCUMENT'
-              AND EXISTS (SELECT 1 FROM content_targets ct WHERE ct.content_id=c.id AND (ct.target_value=$1::text OR ct.target_value=( SELECT role_id::text FROM user_roles WHERE user_id=$1::uuid LIMIT 1) OR ct.target_type='ALL'))
-              AND NOT EXISTS (SELECT 1 FROM user_signed_documents usd WHERE usd.user_id=$1::uuid AND usd.legal_document_id=ld.id)
-              LIMIT 5`, [uid]),
-    // Recent content (offers, announcements, messages) targeted to this user
-    db.query(`SELECT c.id, c.title, c.type, c.message, c.priority, c.created_at
-              FROM content c
-              JOIN content_targets ct ON ct.content_id=c.id
-              WHERE c.type IN ('OFFER','ANNOUNCEMENT','MESSAGE')
-              AND (ct.target_value=$1::text OR ct.target_type='ALL'
-                   OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$1::uuid))
-              AND c.created_at >= NOW() - INTERVAL '30 days'
-              ORDER BY c.created_at DESC LIMIT 8`, [uid]),
-    // Account status
-    db.query(`SELECT status FROM users WHERE user_id=$1::uuid`, [uid]),
-  ]);
+    [openReq, recentOrders, pipeline, unsignedDocs, unreadContent, approvalStatus] = await Promise.all([
+      // Open requests: all not-yet-completed portal requests
+      db.query(
+        `SELECT COUNT(*) FROM sales_requests
+         WHERE user_id=$1::uuid
+         AND UPPER(status) IN ('CREATED','REQUEST_CREATED','DRAFT','PENDING')`,
+        [uid]
+      ),
+      // Recent portal requests (last 10)
+      db.query(
+        `SELECT sr.drop_request_id AS request_no,
+                DATE(sr.request_date)  AS date,
+                (SELECT COUNT(*) FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id) AS products_count,
+                sr.status,
+                sr.erp_order_no AS so_number,
+                sr.request_date AS delivery_date,
+                sr.total_amount AS amount
+         FROM sales_requests sr
+         WHERE sr.user_id=$1::uuid
+         ORDER BY sr.request_date DESC LIMIT 10`,
+        [uid]
+      ),
+      // Pipeline counts by status
+      db.query(
+        `SELECT status, COUNT(*) FROM sales_requests WHERE user_id=$1::uuid GROUP BY status`,
+        [uid]
+      ),
+      // Unsigned legal documents
+      db.query(
+        `SELECT c.id AS content_id, c.title, ld.id AS legal_doc_id
+         FROM content c
+         JOIN legal_documents ld ON ld.id=c.legal_document_id
+         WHERE c.type='DOCUMENT'
+         AND EXISTS (
+           SELECT 1 FROM content_targets ct
+           WHERE ct.content_id=c.id
+           AND (ct.target_value=$1::text
+                OR ct.target_value=(SELECT role_id::text FROM user_roles WHERE user_id=$1::uuid LIMIT 1)
+                OR ct.target_type='ALL')
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM user_signed_documents usd
+           WHERE usd.user_id=$1::uuid AND usd.legal_document_id=ld.id
+         )
+         LIMIT 5`,
+        [uid]
+      ),
+      // Unread content
+      db.query(
+        `SELECT c.id, c.title, c.type, c.message, c.priority, c.created_at
+         FROM content c
+         JOIN content_targets ct ON ct.content_id=c.id
+         WHERE c.type IN ('OFFER','ANNOUNCEMENT','MESSAGE')
+         AND (ct.target_value=$1::text OR ct.target_type='ALL'
+              OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$1::uuid))
+         AND c.created_at >= NOW() - INTERVAL '30 days'
+         ORDER BY c.created_at DESC LIMIT 8`,
+        [uid]
+      ),
+      // Account status
+      db.query(`SELECT status FROM users WHERE user_id=$1::uuid`, [uid]),
+    ]);
   } catch (qErr) {
-    console.error('Dashboard query error:', qErr.message);
-    // Return safe empty state instead of crashing
+    console.error("Dashboard portal query error:", qErr.message);
     return {
-      kpis: { open_requests:0, sales_orders:0, orders_in_dispatch:0, delivered:0, pending_payments:0, total_amount:0 },
+      kpis: { open_requests: 0, sales_orders: 0, orders_in_dispatch: 0, delivered_orders: 0, pending_payments_amount: 0, total_amount: 0 },
       pipeline: [], recent_orders: [], pending_actions: [], notifications: [],
-      unsigned_docs: [], unread_content: [], account_status: 'active',
-      _error: qErr.message
+      unsigned_docs: [], unread_content: [], account_status: "active",
+      _error: qErr.message,
     };
   }
 
-  // Build pipeline stages
+  // ── 2. X3 ERP queries (sales orders, deliveries, pending payments) ──
+  let salesOrdersCount    = 0;
+  let ordersInDispatch    = 0;
+  let deliveredOrders     = 0;
+  let pendingPaymentsAmt  = 0;
+  let totalAmountPeriod   = 0;
+
+  try {
+    const erpUser   = { ...user, ...dbUser, user_id: uid };
+    const adapter   = await ERPFactory.getERPAdapterForUser(erpUser);
+    const pool      = await adapter.poolPromise;
+
+    if (customerCode) {
+      // Sales Orders count from X3 SORDER filtered by customer + date range
+      const soRes = await pool.request()
+        .input("customerCode", sql.NVarChar, customerCode)
+        .input("dateFrom",     sql.Date,     new Date(dateFrom))
+        .input("dateTo",       sql.Date,     new Date(dateTo))
+        .query(`
+          SELECT COUNT(*) AS cnt
+          FROM tbs.LEWISB.SORDER
+          WHERE BPCORD_0 = @customerCode
+            AND ORDDAT_0 BETWEEN @dateFrom AND @dateTo
+        `);
+      salesOrdersCount = Number(soRes.recordset[0]?.cnt || 0);
+
+      // Orders in Dispatch = SDELIVERY where VCRSTA_0 = 1 (in progress, not yet delivered)
+      const dispRes = await pool.request()
+        .input("customerCode", sql.NVarChar, customerCode)
+        .input("dateFrom",     sql.Date,     new Date(dateFrom))
+        .input("dateTo",       sql.Date,     new Date(dateTo))
+        .query(`
+          SELECT COUNT(*) AS cnt
+          FROM LEWISB.SDELIVERY
+          WHERE BPCORD_0 = @customerCode
+            AND VCRSTA_0 = 1
+            AND DLVDAT_0 BETWEEN @dateFrom AND @dateTo
+        `);
+      ordersInDispatch = Number(dispRes.recordset[0]?.cnt || 0);
+
+      // Delivered = SDELIVERY where VCRSTA_0 = 3 (validated/posted = delivered)
+      const delivRes = await pool.request()
+        .input("customerCode", sql.NVarChar, customerCode)
+        .input("dateFrom",     sql.Date,     new Date(dateFrom))
+        .input("dateTo",       sql.Date,     new Date(dateTo))
+        .query(`
+          SELECT COUNT(*) AS cnt
+          FROM LEWISB.SDELIVERY
+          WHERE BPCORD_0 = @customerCode
+            AND VCRSTA_0 = 3
+            AND DLVDAT_0 BETWEEN @dateFrom AND @dateTo
+        `);
+      deliveredOrders = Number(delivRes.recordset[0]?.cnt || 0);
+
+      // Pending Payments = SINVOICE where not fully paid (STA_0 != '3' means not paid/cleared)
+      // STA_0: 1=Draft, 2=Posted/Unpaid, 3=Paid
+      const payRes = await pool.request()
+        .input("customerCode", sql.NVarChar, customerCode)
+        .query(`
+          SELECT COALESCE(SUM(AMTATI_0), 0) AS total
+          FROM tbs.LEWISB.SINVOICE
+          WHERE BPR_0 = @customerCode
+            AND STA_0 IN ('1', '2')
+            AND SIVTYP_0 NOT IN ('AVC','CRN','CNO','AVI')
+        `);
+      pendingPaymentsAmt = Number(payRes.recordset[0]?.total || 0);
+
+      // Total invoiced amount in the date range
+      const totRes = await pool.request()
+        .input("customerCode", sql.NVarChar, customerCode)
+        .input("dateFrom",     sql.Date,     new Date(dateFrom))
+        .input("dateTo",       sql.Date,     new Date(dateTo))
+        .query(`
+          SELECT COALESCE(SUM(AMTATI_0), 0) AS total
+          FROM tbs.LEWISB.SINVOICE
+          WHERE BPR_0 = @customerCode
+            AND ACCDAT_0 BETWEEN @dateFrom AND @dateTo
+            AND SIVTYP_0 NOT IN ('AVC','CRN','CNO','AVI')
+        `);
+      totalAmountPeriod = Number(totRes.recordset[0]?.total || 0);
+    }
+  } catch (erpErr) {
+    console.error("Dashboard ERP query error:", erpErr.message);
+    // Fallback: use portal data for counts if X3 is unavailable
+    const fromTs2 = `${dateFrom} 00:00:00`;
+    const toTs2   = `${dateTo}   23:59:59`;
+    try {
+      const [soFb, dispFb, delivFb, payFb, totFb] = await Promise.all([
+        db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND UPPER(status)='ORDER GENERATED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs2, toTs2]),
+        db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND UPPER(status)='DELIVERY SCHEDULED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs2, toTs2]),
+        db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND UPPER(status)='COMPLETED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs2, toTs2]),
+        db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1::uuid AND UPPER(status) IN ('CREATED','REQUEST_CREATED','DRAFT')`, [uid]),
+        db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1::uuid AND request_date BETWEEN $2 AND $3`, [uid, fromTs2, toTs2]),
+      ]);
+      salesOrdersCount   = Number(soFb.rows[0].count   || 0);
+      ordersInDispatch   = Number(dispFb.rows[0].count  || 0);
+      deliveredOrders    = Number(delivFb.rows[0].count || 0);
+      pendingPaymentsAmt = Number(payFb.rows[0].total   || 0);
+      totalAmountPeriod  = Number(totFb.rows[0].total   || 0);
+    } catch (fbErr) {
+      console.error("Dashboard fallback query error:", fbErr.message);
+    }
+  }
+
+  // ── 3. Build pipeline stages ─────────────────────────────────────
   const statusMap = {};
-  for (const r of pipeline.rows) statusMap[r.status] = Number(r.count);
+  for (const r of pipeline.rows) statusMap[(r.status || "").toUpperCase()] = Number(r.count);
+
   const pipelineStages = [
-    { stage: "request_raised", label: "Request Raised",       count: statusMap["CREATED"] || 0 },
-    { stage: "under_review",   label: "Under Review",         count: statusMap["Processing"] || 0 },
-    { stage: "so_created",     label: "Approved / SO Created",count: statusMap["Order Generated"] || 0 },
-    { stage: "in_dispatch",    label: "In Dispatch",          count: statusMap["Delivery Scheduled"] || 0 },
-    { stage: "delivered",      label: "Delivered",            count: statusMap["Completed"] || 0 },
+    { stage: "request_raised", label: "Request Raised",        count: (statusMap["CREATED"] || statusMap["REQUEST_CREATED"] || statusMap["DRAFT"] || 0) },
+    { stage: "under_review",   label: "Under Review",          count: (statusMap["PROCESSING"] || statusMap["UNDER REVIEW"] || 0) },
+    { stage: "so_created",     label: "Approved / SO Created", count: salesOrdersCount },
+    { stage: "in_dispatch",    label: "In Dispatch",           count: ordersInDispatch },
+    { stage: "delivered",      label: "Delivered",             count: deliveredOrders },
   ];
 
-  // Build pending actions
+  // ── 4. Pending actions ────────────────────────────────────────────
   const pendingActions = [];
   const unsignedCount = unsignedDocs.rows.length;
   if (unsignedCount > 0)
     pendingActions.push({ key: "unsigned_docs", label: "Documents to Sign", count: unsignedCount, icon: "pen", path: "/inbox" });
   if (Number(openReq.rows[0].count) > 0)
     pendingActions.push({ key: "open_requests", label: "Open Order Requests", count: Number(openReq.rows[0].count), icon: "clock", path: "/sales-requests" });
-  if (Number(pendingPayments.rows[0].total) > 0)
-    pendingActions.push({ key: "payments_due", label: "Payments Due", count: null, icon: "credit-card", path: "/payments",
-      amount: Number(pendingPayments.rows[0].total) });
+  if (pendingPaymentsAmt > 0)
+    pendingActions.push({ key: "payments_due", label: "Payments Due", count: null, icon: "credit-card", path: "/payments", amount: pendingPaymentsAmt });
 
-  // Build notifications from unread content
+  // ── 5. Notifications ──────────────────────────────────────────────
   const notifications = [];
   for (const row of unsignedDocs.rows) {
     notifications.push({ id: `doc-${row.content_id}`, type: "doc_to_sign",
@@ -304,16 +408,16 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
     date_range: { from: dateFrom, to: dateTo },
     kpis: {
       open_requests:           Number(openReq.rows[0].count),
-      sales_orders:            Number(salesOrders.rows[0].count),
-      orders_in_dispatch:      Number(dispatch.rows[0].count),
-      delivered_orders:        Number(delivered.rows[0].count),
-      pending_payments_amount: Number(pendingPayments.rows[0].total),
-      total_amount:            Number(totalAmount.rows[0].total),
+      sales_orders:            salesOrdersCount,
+      orders_in_dispatch:      ordersInDispatch,
+      delivered_orders:        deliveredOrders,
+      pending_payments_amount: pendingPaymentsAmt,
+      total_amount:            totalAmountPeriod,
       currency: "USD",
     },
-    pipeline: pipelineStages,
+    pipeline:        pipelineStages,
     pending_actions: pendingActions,
     notifications,
-    recent_orders: recentOrders.rows,
+    recent_orders:   recentOrders.rows,
   };
 };
