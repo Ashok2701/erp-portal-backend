@@ -63,3 +63,10 @@ exports.getERPAdapter = () => {
   }
   throw new Error("Unsupported ERP");
 };
+
+// Lookup adapter by tenantId directly (no user object needed)
+// Used by signup flow where we have tenantId but no authenticated user yet
+exports.getERPAdapterForTenant = async (tenantId) => {
+  if (!tenantId) throw new Error("tenantId is required");
+  return exports.getERPAdapterForUser({ tenant_id: tenantId });
+};
