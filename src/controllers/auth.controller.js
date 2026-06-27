@@ -1,183 +1,157 @@
-const jwt  = require("jsonwebtoken");
+const jwt    = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
+const db     = require("../config/db");
 
-const UserModel  = require("../models/user.model");
-const RoleModel = require("../models/role.model");
+const UserModel   = require("../models/user.model");
+const RoleModel   = require("../models/role.model");
 const ModuleModel = require("../models/module.model");
 
-
 function resolveErpContext(user) {
-  let erp_customer_code = null;
-  let erp_supplier_code = null;
-
-  if (user.erp_entity_type === 'customer') {
-    erp_customer_code = user.erp_entity_code;
-  }
-  else if (user.erp_entity_type === 'supplier') {
-    erp_supplier_code = user.erp_entity_code;
-  }
-
   return {
-    erp_customer_code,
-    erp_supplier_code
+    erp_customer_code: user.erp_entity_type === "customer" ? user.erp_entity_code : null,
+    erp_supplier_code: user.erp_entity_type === "supplier" ? user.erp_entity_code : null,
   };
 }
 
-exports.login = async (req, res) => {
-
-
-
- const {username, password} = req.body;
-
- const user = await UserModel.findByUsername(username)
-
-
-if(!user) {
-    return res.status(401).json({message : "User doesn't exist"});
- }
-
- if(!user.is_active && user.status !== 'IN_VERIFICATION' && user.status !== 'PENDING_APPROVAL') {
-    return res.status(401).json({message : "User is inactive"});
- }
-
-
-// if(!user.is_active) {
-//    return res.status(401).json({message : "User is inactive"});
-// }
-
-
- if (user.status === 'PENDING_REVIEW') {
-   // throw new Error("Your account is pending review. Please wait for admin approval.");
-    return res.status(401).json({message : "Your account is pending review. Please wait for admin approval."});
- }
- if (user.status === 'REJECTED') {
-  // throw new Error("Your account has been rejected. Please contact support.");
-   return res.status(401).json({message : "Your account has been rejected. Please contact support."});
- }
-
-
-const erpContext = resolveErpContext(user);
- console.log("user is", username)
- console.log("passwrod from body", password);
-  console.log("passwrod from body", user.password_hash);
- //console.log("password after bcrpt", bcrypt(password))
-bcrypt.hash("Password@123",10).then(console.log);
-
- const isValid = await bcrypt.compare(password, user.password_hash);
-
- console.log("passwrod valid", isValid);
-
-
- if(!isValid) {
-    return res.status(401).json({message : "Invalid credentails"});
- }
-
-const roles = await RoleModel.getRolesByUserId(user.user_id);
-
-const roleName = roles.length > 0 ? roles[0].role_name : (user.requested_role || 'Customer');
-const expiresIn = process.env.JWT_EXPIRES_IN || "8h";
-
-
- const token = jwt.sign({
-    user_id : user.user_id,
-    tenant_id : user.tenant_id,
-    role : roleName || "CUSTOMER",
- },
-
-   process.env.JWT_SECRET,
-   {expiresIn}
-
-);
-
-res.json({token,  user: {
-                     user_id:        user.user_id,
-                     tenant_id:      user.tenant_id,
-                     username:       user.username,
-                     role:           roleName || "CUSTOMER",
-                     erp_customer_code: erpContext.erp_customer_code,
-                     erp_supplier_code: erpContext.erp_supplier_code,
-                     status:         user.status || "ACTIVE",
-                     allowedsite:    user.allowedsite,
-                     portal_mode:    user.portal_mode || "b2c",
-                     is_super_admin: user.is_super_admin || false,
-                     roles
-                   }
-                   });
+// Build partner payload from user row (null-safe)
+function resolvePartnerContext(user) {
+  if (!user.partner_id) return {};
+  return {
+    partner_id:            user.partner_id,
+    partner_name:          user.partner_name,
+    partner_slug:          user.partner_slug,
+    partner_plan:          user.partner_plan,
+    partner_app_name:      user.partner_app_name,
+    partner_primary_color: user.partner_primary_color,
+    partner_currency:      user.partner_currency,
+    partner_language:      user.partner_language,
+    partner_unit:          user.partner_unit,
+  };
 }
 
+// ── LOGIN ────────────────────────────────────────────────────
+exports.login = async (req, res) => {
+  const { username, password } = req.body;
 
+  const user = await UserModel.findByUsername(username);
 
+  if (!user)
+    return res.status(401).json({ message: "User doesn't exist" });
 
+  if (!user.is_active && user.status !== "IN_VERIFICATION" && user.status !== "PENDING_APPROVAL")
+    return res.status(401).json({ message: "User is inactive" });
 
-exports.getMe = async (req , res) => {
-   try {
-   const { user_id, tenant_id, username, role, status,
-           portal_mode, is_super_admin, tenant_slug } = req.user;
+  if (user.status === "PENDING_REVIEW")
+    return res.status(401).json({ message: "Your account is pending review. Please wait for admin approval." });
 
-   const roles = await RoleModel.getRolesByUserId(user_id);
+  if (user.status === "REJECTED")
+    return res.status(401).json({ message: "Your account has been rejected. Please contact support." });
 
-   // Get full user details from DB
-   const userResult = await db.query(
-     `SELECT u.allowedsite, u.erp_entity_type, u.erp_entity_code,
-             u.full_name, u.email
-      FROM users u WHERE u.user_id = $1`, [user_id]
-   );
-   const extra = userResult.rows[0] || {};
+  const isValid = await bcrypt.compare(password, user.password_hash);
+  if (!isValid)
+    return res.status(401).json({ message: "Invalid credentials" });
 
-   res.json({
+  const roles      = await RoleModel.getRolesByUserId(user.user_id);
+  const roleName   = roles.length > 0 ? roles[0].role_name : (user.requested_role || "Customer");
+  const expiresIn  = process.env.JWT_EXPIRES_IN || "8h";
+
+  // Resolve system_role — backward compat with is_super_admin
+  const system_role = user.system_role ||
+    (user.is_super_admin ? "owner" : "tenant_user");
+
+  const erpContext     = resolveErpContext(user);
+  const partnerContext = resolvePartnerContext(user);
+
+  const token = jwt.sign(
+    { user_id: user.user_id, tenant_id: user.tenant_id, role: roleName || "CUSTOMER" },
+    process.env.JWT_SECRET,
+    { expiresIn }
+  );
+
+  res.json({
+    token,
+    user: {
+      user_id:        user.user_id,
+      tenant_id:      user.tenant_id,
+      username:       user.username,
+      role:           roleName || "CUSTOMER",
+      status:         user.status || "ACTIVE",
+      allowedsite:    user.allowedsite,
+      portal_mode:    user.portal_mode || "b2c",
+      is_super_admin: user.is_super_admin || false,
+      system_role,
+      erp_customer_code: erpContext.erp_customer_code,
+      erp_supplier_code: erpContext.erp_supplier_code,
+      ...partnerContext,
+      roles,
+    },
+  });
+};
+
+// ── GET ME ───────────────────────────────────────────────────
+exports.getMe = async (req, res) => {
+  try {
+    const { user_id, tenant_id, username, role, status,
+            portal_mode, is_super_admin, tenant_slug, system_role } = req.user;
+
+    const roles = await RoleModel.getRolesByUserId(user_id);
+
+    // Get full user details + partner context in one query
+    const userResult = await db.query(
+      `SELECT u.allowedsite, u.erp_entity_type, u.erp_entity_code,
+              u.full_name, u.email, u.system_role,
+              pu.partner_id,
+              p.partner_name,  p.slug  AS partner_slug,
+              p.plan           AS partner_plan,
+              p.app_name       AS partner_app_name,
+              p.primary_color  AS partner_primary_color,
+              p.default_currency AS partner_currency,
+              p.default_language AS partner_language,
+              p.default_unit     AS partner_unit
+       FROM users u
+       LEFT JOIN partner_users pu ON pu.user_id = u.user_id AND pu.is_active = true
+       LEFT JOIN partners p ON p.partner_id = pu.partner_id
+       WHERE u.user_id = $1`,
+      [user_id]
+    );
+
+    const extra = userResult.rows[0] || {};
+    const resolved_system_role = extra.system_role ||
+      (is_super_admin ? "owner" : "tenant_user");
+
+    const partnerContext = resolvePartnerContext(extra);
+
+    res.json({
       user_id,
       tenant_id,
       tenant_slug,
       username,
       role,
       status,
-      portal_mode:    portal_mode    || 'b2c',
-      is_super_admin: is_super_admin || false,
-      allowedsite:    extra.allowedsite,
+      portal_mode:       portal_mode    || "b2c",
+      is_super_admin:    is_super_admin || false,
+      system_role:       resolved_system_role,
+      allowedsite:       extra.allowedsite,
       erp_customer_code: extra.erp_entity_code,
-      full_name:      extra.full_name,
-      email:          extra.email,
-      roles
-   });
-   }
-   catch (err) {
-      console.error("GET ME ERROR", err);
-      res.status(500).json({message : "Failed to Load user info"});
-   }
-}
+      full_name:         extra.full_name,
+      email:             extra.email,
+      ...partnerContext,
+      roles,
+    });
+  } catch (err) {
+    console.error("GET ME ERROR:", err);
+    res.status(500).json({ message: "Failed to load user info" });
+  }
+};
 
-exports.getModules = async (req , res) => {
-   try {
- 
-        const {user_id} = req.user;
-
-        const modules = await ModuleModel.getModulesByUserId(user_id);
-
-        res.json({modules})
-   }
-   catch (err) {
-      console.error("GET Modules ERROR", err);
-      res.status(500).json({message : "Failed to Load Modules"});
-   }
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// ── GET MODULES ──────────────────────────────────────────────
+exports.getModules = async (req, res) => {
+  try {
+    const { user_id } = req.user;
+    const modules = await ModuleModel.getModulesByUserId(user_id);
+    res.json({ modules });
+  } catch (err) {
+    console.error("GET MODULES ERROR:", err);
+    res.status(500).json({ message: "Failed to load modules" });
+  }
+};

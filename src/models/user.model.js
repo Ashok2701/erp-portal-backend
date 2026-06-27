@@ -1,48 +1,55 @@
 
 const pool = require("../config/db")
 
-exports.findByUsername  = async(username) => {
- 
-    const result  = await pool.query(
-
-        `SELECT user_id, tenant_id,username, password_hash, is_active,erp_entity_type , erp_entity_code, status, allowedsite, portal_mode, is_super_admin
-        FROM users
-        WHERE username = $1
-        `,
-        [username]
-    );
-
-    return result.rows[0];
-
+exports.findByUsername = async (username) => {
+  const result = await pool.query(
+    `SELECT u.user_id, u.tenant_id, u.username, u.password_hash,
+            u.is_active, u.erp_entity_type, u.erp_entity_code,
+            u.status, u.allowedsite, u.portal_mode,
+            u.is_super_admin, u.system_role,
+            pu.partner_id,
+            p.partner_name,  p.slug  AS partner_slug,
+            p.plan           AS partner_plan,
+            p.app_name       AS partner_app_name,
+            p.primary_color  AS partner_primary_color,
+            p.default_currency AS partner_currency,
+            p.default_language AS partner_language,
+            p.default_unit     AS partner_unit
+     FROM users u
+     LEFT JOIN partner_users pu ON pu.user_id = u.user_id AND pu.is_active = true
+     LEFT JOIN partners p ON p.partner_id = pu.partner_id
+     WHERE u.username = $1`,
+    [username]
+  );
+  return result.rows[0];
 };
 
 exports.assignRoles = async (userId, roleIds) => {
   for (const roleId of roleIds) {
     await pool.query(
-      `
-      INSERT INTO user_roles (user_role_id, user_id, role_id)
-      VALUES (uuid_generate_v4(), $1, $2)
-      `,
+      `INSERT INTO user_roles (user_role_id, user_id, role_id)
+       VALUES (uuid_generate_v4(), $1, $2)`,
       [userId, roleId]
     );
   }
 };
 
-
 exports.createUser = async (user) => {
   const result = await pool.query(
-    `
-    INSERT INTO users (
-      user_id, tenant_id, username,email, password_hash, full_name, is_active, contact_number, whatsapp_number , country_code,erp_entity_type ,erp_entity_code
-    )
-    VALUES (
-      gen_random_uuid(), $1, $2, $3, $4,$5, $6,$7,$8,$9 , $10, $11
-    )
-    RETURNING user_id, username, email
-    `,
-    [user.tenant_id, user.username,user.email , user.password_hash, user.full_name,user.is_active ,user.contact_number, user.whatsapp_number,user.country_code || '+91',  user.erp_entity_type , user.erp_entity_code ]
+    `INSERT INTO users (
+      user_id, tenant_id, username, email, password_hash, full_name,
+      is_active, contact_number, whatsapp_number, country_code,
+      erp_entity_type, erp_entity_code
+    ) VALUES (
+      gen_random_uuid(), $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+    ) RETURNING user_id, username, email`,
+    [
+      user.tenant_id, user.username, user.email, user.password_hash,
+      user.full_name, user.is_active, user.contact_number,
+      user.whatsapp_number, user.country_code || '+91',
+      user.erp_entity_type, user.erp_entity_code
+    ]
   );
-
   return result.rows[0];
 };
 
@@ -63,20 +70,18 @@ exports.getAllUsers = async (tenantId) => {
   return result.rows;
 };
 
-
 exports.getUserById = async (id) => {
   const result = await pool.query(
-    `
-   SELECT u.user_id, username, allowedsite, full_name, u.is_active, contact_number ,whatsapp_number ,country_code ,erp_entity_code ,erp_entity_type, r.role_name
-    FROM users u
-    left join user_roles ur on ur.user_id = u.user_id 
-    left join roles r on r.role_id  = ur.role_id 
-    WHERE u.user_id = $1
-    ORDER BY u.created_at DESC
-    `,
+    `SELECT u.user_id, username, allowedsite, full_name, u.is_active,
+            contact_number, whatsapp_number, country_code,
+            erp_entity_code, erp_entity_type, r.role_name
+     FROM users u
+     LEFT JOIN user_roles ur ON ur.user_id = u.user_id
+     LEFT JOIN roles r ON r.role_id = ur.role_id
+     WHERE u.user_id = $1
+     ORDER BY u.created_at DESC`,
     [id]
   );
-
   return result.rows;
 };
 
@@ -85,73 +90,38 @@ exports.checkUsernameExists = async (username) => {
     `SELECT 1 FROM users WHERE LOWER(username) = LOWER($1)`,
     [username]
   );
-
   return result.rowCount > 0;
 };
 
 exports.updateUser = async (userId, data) => {
-
   const {
-    full_name,
-    email,
-    contact_number,
-    whatsapp_number,
-    erp_entity_type,
-    erp_entity_code,
-    is_active
+    full_name, email, contact_number, whatsapp_number,
+    erp_entity_type, erp_entity_code, is_active
   } = data;
 
   await pool.query(
-    `
-    UPDATE users
-    SET
-      full_name = $1,
-      email = $2,
-      contact_number = $3,
-      whatsapp_number = $4,
-      erp_entity_type = $5,
-      erp_entity_code = $6,
-      is_active = $7
-    WHERE user_id = $8
-    `,
-    [
-      full_name,
-      email,
-      contact_number,
-      whatsapp_number,
-      erp_entity_type,
-      erp_entity_code,
-      is_active,
-      userId
-    ]
+    `UPDATE users SET
+       full_name = $1, email = $2, contact_number = $3,
+       whatsapp_number = $4, erp_entity_type = $5,
+       erp_entity_code = $6, is_active = $7
+     WHERE user_id = $8`,
+    [full_name, email, contact_number, whatsapp_number,
+     erp_entity_type, erp_entity_code, is_active, userId]
   );
 };
 
 exports.updateUserRoles = async (userId, roleIds) => {
-
-  // delete old roles
-  await pool.query(
-    `DELETE FROM user_roles WHERE user_id = $1`,
-    [userId]
-  );
-
-  // insert new roles
+  await pool.query(`DELETE FROM user_roles WHERE user_id = $1`, [userId]);
   for (const roleId of roleIds) {
     await pool.query(
-      `
-      INSERT INTO user_roles (user_role_id, user_id, role_id)
-      VALUES (uuid_generate_v4(), $1, $2)
-      `,
+      `INSERT INTO user_roles (user_role_id, user_id, role_id)
+       VALUES (uuid_generate_v4(), $1, $2)`,
       [userId, roleId]
     );
   }
 };
 
-
 exports.deleteUser = async (userId) => {
-
   await pool.query(`DELETE FROM user_roles WHERE user_id = $1`, [userId]);
-
   await pool.query(`DELETE FROM users WHERE user_id = $1`, [userId]);
 };
-
