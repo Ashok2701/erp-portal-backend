@@ -7,14 +7,42 @@ const emailService        = require("../services/email.service");
 // ── LIST ALL TENANTS ─────────────────────────────────────────
 exports.listTenants = async (req, res) => {
   try {
-    const result = await db.query(`
-      SELECT t.*,
-        (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.tenant_id) AS user_count,
-        ts.erp_system, ts.erp_db_host, ts.erp_db_name,
-        ts.smtp_host, ts.x3_soap_url, ts.spaces_folder
-      FROM tenants t
-      LEFT JOIN tenant_settings ts ON ts.tenant_id = t.tenant_id
-      ORDER BY t.created_at ASC`);
+    const { system_role, user_id } = req.user;
+
+    let query, params = [];
+
+    if (system_role === "partner_user") {
+      // Partner users only see their own tenants
+      const pu = await db.query(
+        "SELECT partner_id FROM partner_users WHERE user_id = $1 AND is_active = true LIMIT 1",
+        [user_id]
+      );
+      if (!pu.rows.length)
+        return res.json({ success: true, data: [] });
+
+      query = `
+        SELECT t.*,
+          (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.tenant_id) AS user_count,
+          ts.erp_system, ts.erp_db_host, ts.erp_db_name,
+          ts.smtp_host, ts.x3_soap_url, ts.spaces_folder
+        FROM tenants t
+        LEFT JOIN tenant_settings ts ON ts.tenant_id = t.tenant_id
+        WHERE t.partner_id = $1
+        ORDER BY t.created_at ASC`;
+      params = [pu.rows[0].partner_id];
+    } else {
+      // Owner sees all tenants
+      query = `
+        SELECT t.*,
+          (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.tenant_id) AS user_count,
+          ts.erp_system, ts.erp_db_host, ts.erp_db_name,
+          ts.smtp_host, ts.x3_soap_url, ts.spaces_folder
+        FROM tenants t
+        LEFT JOIN tenant_settings ts ON ts.tenant_id = t.tenant_id
+        ORDER BY t.created_at ASC`;
+    }
+
+    const result = await db.query(query, params);
     res.json({ success: true, data: result.rows });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -45,15 +73,28 @@ exports.getTenant = async (req, res) => {
 // ── CREATE TENANT ────────────────────────────────────────────
 exports.createTenant = async (req, res) => {
   try {
-    const { name, slug, plan = "starter" } = req.body;
+    const { name, slug, plan = "starter", is_test = false, test_note, partner_id } = req.body;
     if (!name || !slug) return res.status(400).json({ success: false, message: "name and slug are required" });
 
     const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, "");
+    const { system_role } = req.user;
+
+    // Partner users can only create tenants under their own partner
+    let resolvedPartnerId = partner_id || null;
+    if (system_role === "partner_user") {
+      const pu = await db.query(
+        "SELECT partner_id FROM partner_users WHERE user_id = $1 AND is_active = true LIMIT 1",
+        [req.user.user_id]
+      );
+      if (!pu.rows.length)
+        return res.status(403).json({ success: false, message: "No active partner association found" });
+      resolvedPartnerId = pu.rows[0].partner_id;
+    }
 
     const result = await db.query(
-      `INSERT INTO tenants (tenant_name, slug, plan, is_active, created_at)
-       VALUES ($1,$2,$3,true,NOW()) RETURNING *`,
-      [name, cleanSlug, plan]
+      `INSERT INTO tenants (tenant_name, slug, plan, partner_id, is_test, test_note, is_active, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,true,NOW()) RETURNING *`,
+      [name, cleanSlug, plan, resolvedPartnerId, is_test, test_note]
     );
 
     const tenant = result.rows[0];
