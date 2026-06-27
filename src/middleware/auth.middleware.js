@@ -12,7 +12,7 @@ module.exports = async (req, res, next) => {
 
     const userResult = await db.query(
       `SELECT u.user_id, u.username, u.status, u.portal_mode,
-              u.is_super_admin, u.tenant_id,
+              u.is_super_admin, u.system_role, u.tenant_id,
               r.role_name,
               t.slug AS tenant_slug
        FROM users u
@@ -25,6 +25,10 @@ module.exports = async (req, res, next) => {
 
     const row = userResult.rows[0] || {};
 
+    // Resolve system_role — owner check via is_super_admin for backward compat
+    const system_role = row.system_role ||
+      (row.is_super_admin ? "owner" : "tenant_user");
+
     req.user = {
       id:             decoded.user_id,
       user_id:        decoded.user_id,
@@ -35,6 +39,7 @@ module.exports = async (req, res, next) => {
       status:         row.status         || "ACTIVE",
       portal_mode:    row.portal_mode    || "b2c",
       is_super_admin: row.is_super_admin || false,
+      system_role,
     };
 
     next();

@@ -19,6 +19,8 @@ const salesDeliveries = require("./routes/salesDeliveries.routes");
 const inventoryRoutes   = require("./routes/inventory.routes");
 const superadminRoutes  = require("./routes/superadmin.routes");
 const maintenanceRoutes = require("./routes/maintenance.routes");
+const partnerRoutes     = require("./routes/partner.routes");
+
 const app = express();
 
 app.use(cors());
@@ -51,6 +53,7 @@ app.use("/erp/inventory",   inventoryRoutes);  // alias — frontend uses /erp/i
 app.use("/maintenance",  maintenanceRoutes);
 app.use("/credit-notes", require("./routes/creditNotes.routes"));
 app.use("/superadmin",  superadminRoutes);
+app.use("/partners",    partnerRoutes);        // 3-tier: partner/reseller management
 
 // Auto-migration: add erp_delivery_no column if not exists
 const db = require('./config/db');
