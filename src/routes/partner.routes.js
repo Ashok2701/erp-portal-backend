@@ -21,4 +21,9 @@ router.post  ("/:id/users",     auth, ownerOnly, ctrl.addPartnerUser);
 router.get   ("/:id/tenants",   auth, partnerOnly, injectPartnerScope, ctrl.getPartnerTenants);
 router.post  ("/:id/tenants",   auth, partnerOnly, injectPartnerScope, ctrl.createTenantUnderPartner);
 
+// ── OWNER MANAGEMENT ─────────────────────────────────────────
+router.get  ('/owners',           auth, ownerOnly, ctrl.listOwners);
+router.post ('/owners',           auth, ownerOnly, ctrl.createOwner);
+router.put  ('/owners/:userId',   auth, ownerOnly, ctrl.toggleOwnerStatus);
+
 module.exports = router;

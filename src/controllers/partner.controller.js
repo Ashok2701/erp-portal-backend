@@ -356,3 +356,74 @@ exports.getBrandingConfig = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// ── LIST ALL OWNERS ──────────────────────────────────────────
+exports.listOwners = async (req, res) => {
+  try {
+    const result = await db.query(`
+      SELECT user_id, username, email, full_name,
+             is_active, system_role, created_at, status
+      FROM users
+      WHERE system_role = 'owner' OR is_super_admin = true
+      ORDER BY created_at ASC
+    `);
+    res.json({ success: true, data: result.rows });
+  } catch (err) {
+    console.error('LIST OWNERS ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── CREATE OWNER ─────────────────────────────────────────────
+exports.createOwner = async (req, res) => {
+  try {
+    const { username, email, full_name, password } = req.body;
+    if (!username || !email || !password)
+      return res.status(400).json({ success: false, message: 'username, email and password are required' });
+
+    const bcrypt = require('bcrypt');
+    const password_hash = await bcrypt.hash(password, 10);
+
+    const result = await db.query(`
+      INSERT INTO users (
+        username, email, full_name, password_hash,
+        is_active, status, system_role, portal_mode,
+        is_super_admin, tenant_id
+      ) VALUES ($1,$2,$3,$4,true,'ACTIVE','owner','both',true,NULL)
+      RETURNING user_id, username, email, full_name, is_active, created_at
+    `, [username, email, full_name, password_hash]);
+
+    res.status(201).json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    if (err.code === '23505')
+      return res.status(400).json({ success: false, message: 'Username or email already exists' });
+    console.error('CREATE OWNER ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── TOGGLE OWNER STATUS ──────────────────────────────────────
+exports.toggleOwnerStatus = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { is_active } = req.body;
+
+    // Cannot deactivate yourself
+    if (userId === req.user.user_id)
+      return res.status(400).json({ success: false, message: 'Cannot deactivate your own account' });
+
+    const result = await db.query(`
+      UPDATE users SET is_active = $1
+      WHERE user_id = $2 AND (system_role = 'owner' OR is_super_admin = true)
+      RETURNING user_id, username, is_active
+    `, [is_active, userId]);
+
+    if (!result.rows.length)
+      return res.status(404).json({ success: false, message: 'Owner not found' });
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    console.error('TOGGLE OWNER ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
