@@ -13,10 +13,14 @@ exports.getActive = async (req, res) => {
   }
 };
 
-// Admin — list all
+// Admin — list all (owner sees all tenants, admin sees own tenant)
 exports.list = async (req, res) => {
   try {
-    const plans = await service.listPlans(req.user.tenant_id);
+    const { tenant_id, system_role } = req.user;
+    // Owner has no tenant_id — list all plans across all tenants
+    const plans = (system_role === "owner" || !tenant_id)
+      ? await service.listAllPlans()
+      : await service.listPlans(tenant_id);
     res.json({ success: true, data: plans });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -28,7 +32,9 @@ exports.create = async (req, res) => {
   try {
     if (!req.body.title || !req.body.message || !req.body.start_date || !req.body.end_date)
       return res.status(400).json({ success: false, message: "title, message, start_date and end_date are required" });
-    const plan = await service.createPlan(req.user.tenant_id, req.user.user_id, req.body);
+    // Owner must specify tenant_id in body, admin uses their own
+    const tenantId = req.user.tenant_id || req.body.tenant_id;
+    const plan = await service.createPlan(tenantId, req.user.user_id, req.body);
     res.json({ success: true, data: plan });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });

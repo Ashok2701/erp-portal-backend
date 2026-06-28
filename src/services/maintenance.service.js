@@ -102,3 +102,15 @@ exports.deletePlan = async (tenantId, id) => {
     [id, tenantId]
   );
 };
+
+// ── Owner: list ALL plans across all tenants ──────────────────────
+exports.listAllPlans = async () => {
+  const result = await db.query(
+    `SELECT mp.*, u.username AS created_by_name, t.tenant_name
+     FROM maintenance_plans mp
+     LEFT JOIN users u ON u.user_id = mp.created_by
+     LEFT JOIN tenants t ON t.tenant_id = mp.tenant_id
+     ORDER BY mp.start_date DESC`
+  );
+  return result.rows;
+};

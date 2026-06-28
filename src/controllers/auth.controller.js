@@ -59,11 +59,16 @@ exports.login = async (req, res) => {
   const system_role = user.system_role ||
     (user.is_super_admin ? "owner" : "tenant_user");
 
+  // Role display: owner always shows as "Owner", partner as "Partner"
+  const displayRole = system_role === "owner"        ? "Owner"
+                    : system_role === "partner_user"  ? "Partner"
+                    : roleName || "Customer";
+
   const erpContext     = resolveErpContext(user);
   const partnerContext = resolvePartnerContext(user);
 
   const token = jwt.sign(
-    { user_id: user.user_id, tenant_id: user.tenant_id, role: roleName || "CUSTOMER" },
+    { user_id: user.user_id, tenant_id: user.tenant_id, role: displayRole },
     process.env.JWT_SECRET,
     { expiresIn }
   );
@@ -74,7 +79,7 @@ exports.login = async (req, res) => {
       user_id:        user.user_id,
       tenant_id:      user.tenant_id,
       username:       user.username,
-      role:           roleName || "CUSTOMER",
+      role:           displayRole,
       status:         user.status || "ACTIVE",
       allowedsite:    user.allowedsite,
       portal_mode:    user.portal_mode || "b2c",
@@ -121,12 +126,17 @@ exports.getMe = async (req, res) => {
 
     const partnerContext = resolvePartnerContext(extra);
 
+    // Display role based on system_role
+    const displayRole = resolved_system_role === "owner"       ? "Owner"
+                      : resolved_system_role === "partner_user" ? "Partner"
+                      : role || "Customer";
+
     res.json({
       user_id,
       tenant_id,
       tenant_slug,
       username,
-      role,
+      role: displayRole,
       status,
       portal_mode:       portal_mode    || "b2c",
       is_super_admin:    is_super_admin || false,
