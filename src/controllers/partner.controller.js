@@ -9,7 +9,8 @@ exports.listPartners = async (req, res) => {
     const result = await db.query(`
       SELECT p.*,
         (SELECT COUNT(*) FROM tenants t WHERE t.partner_id = p.partner_id) AS tenant_count,
-        (SELECT COUNT(*) FROM tenants t WHERE t.partner_id = p.partner_id AND t.is_test = false) AS active_tenant_count,
+        (SELECT COUNT(*) FROM tenants t WHERE t.partner_id = p.partner_id AND t.is_test = false AND t.is_active = true) AS active_tenant_count,
+        (SELECT COUNT(*) FROM tenants t WHERE t.partner_id = p.partner_id AND t.is_test = true) AS test_tenant_count,
         (SELECT COUNT(*) FROM partner_users pu WHERE pu.partner_id = p.partner_id) AS user_count
       FROM partners p
       ORDER BY p.created_at DESC
