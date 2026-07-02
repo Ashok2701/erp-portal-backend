@@ -5,6 +5,9 @@ const ctrl     = require("../controllers/partner.controller");
 const auth     = require("../middleware/auth.middleware");
 const { ownerOnly, partnerOnly, injectPartnerScope } = require("../middleware/partner.middleware");
 
+// ── OWNER DASHBOARD STATS ────────────────────────────────────
+router.get("/dashboard/stats",   auth, ownerOnly, ctrl.getOwnerDashboardStats);
+
 // ── PUBLIC ───────────────────────────────────────────────────
 router.get("/config/branding", ctrl.getBrandingConfig);
 

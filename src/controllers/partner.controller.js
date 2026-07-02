@@ -428,3 +428,116 @@ exports.toggleOwnerStatus = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// ── OWNER DASHBOARD STATS ────────────────────────────────────
+exports.getOwnerDashboardStats = async (req, res) => {
+  try {
+    const [
+      partnerStats,
+      tenantStats,
+      userStats,
+      recentTenants,
+      recentPartners,
+      planBreakdown,
+      tenantGrowth,
+    ] = await Promise.all([
+
+      // Partner stats
+      db.query(`
+        SELECT
+          COUNT(*)                                          AS total_partners,
+          COUNT(*) FILTER (WHERE is_active = true)         AS active_partners,
+          COUNT(*) FILTER (WHERE is_active = false)        AS inactive_partners,
+          COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') AS new_this_month
+        FROM partners
+      `),
+
+      // Tenant stats
+      db.query(`
+        SELECT
+          COUNT(*)                                                AS total_tenants,
+          COUNT(*) FILTER (WHERE is_active = true AND is_test = false)  AS active_tenants,
+          COUNT(*) FILTER (WHERE is_test = true)                 AS test_tenants,
+          COUNT(*) FILTER (WHERE partner_id IS NULL)             AS direct_tenants,
+          COUNT(*) FILTER (WHERE partner_id IS NOT NULL)         AS partner_tenants,
+          COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') AS new_this_month
+        FROM tenants
+      `),
+
+      // User stats across all tenants
+      db.query(`
+        SELECT
+          COUNT(*)                                              AS total_users,
+          COUNT(*) FILTER (WHERE is_active = true)             AS active_users,
+          COUNT(*) FILTER (WHERE status = 'ACTIVE')            AS verified_users,
+          COUNT(*) FILTER (WHERE status = 'PENDING_REVIEW')    AS pending_review,
+          COUNT(*) FILTER (WHERE status = 'PENDING_APPROVAL')  AS pending_approval,
+          COUNT(*) FILTER (WHERE status = 'IN_VERIFICATION')   AS in_verification,
+          COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '30 days') AS new_this_month
+        FROM users
+        WHERE system_role = 'tenant_user' AND tenant_id IS NOT NULL
+      `),
+
+      // Recent tenants (last 5)
+      db.query(`
+        SELECT t.tenant_id, t.tenant_name, t.slug, t.plan,
+               t.is_active, t.is_test, t.created_at,
+               p.partner_name,
+               (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.tenant_id) AS user_count,
+               ts.erp_system, ts.erp_db_host
+        FROM tenants t
+        LEFT JOIN partners p ON p.partner_id = t.partner_id
+        LEFT JOIN tenant_settings ts ON ts.tenant_id = t.tenant_id
+        ORDER BY t.created_at DESC LIMIT 5
+      `),
+
+      // Recent partners (last 5)
+      db.query(`
+        SELECT p.partner_id, p.partner_name, p.slug, p.plan,
+               p.is_active, p.created_at, p.email,
+               COUNT(t.tenant_id) AS tenant_count
+        FROM partners p
+        LEFT JOIN tenants t ON t.partner_id = p.partner_id
+        GROUP BY p.partner_id
+        ORDER BY p.created_at DESC LIMIT 5
+      `),
+
+      // Tenant plan breakdown
+      db.query(`
+        SELECT plan, COUNT(*) AS count
+        FROM tenants
+        WHERE is_test = false
+        GROUP BY plan
+        ORDER BY count DESC
+      `),
+
+      // Tenant growth last 6 months
+      db.query(`
+        SELECT
+          TO_CHAR(DATE_TRUNC('month', created_at), 'Mon YYYY') AS month,
+          DATE_TRUNC('month', created_at) AS month_date,
+          COUNT(*) AS count
+        FROM tenants
+        WHERE created_at >= NOW() - INTERVAL '6 months'
+        GROUP BY DATE_TRUNC('month', created_at)
+        ORDER BY month_date ASC
+      `),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        partners:       partnerStats.rows[0],
+        tenants:        tenantStats.rows[0],
+        users:          userStats.rows[0],
+        recentTenants:  recentTenants.rows,
+        recentPartners: recentPartners.rows,
+        planBreakdown:  planBreakdown.rows,
+        tenantGrowth:   tenantGrowth.rows,
+      }
+    });
+  } catch (err) {
+    console.error('OWNER DASHBOARD STATS ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
