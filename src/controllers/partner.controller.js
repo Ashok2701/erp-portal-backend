@@ -541,3 +541,200 @@ exports.getOwnerDashboardStats = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// ── PARTNER: CREATE USER FOR A PARTNER ───────────────────────
+// Owner creates a staff member for a partner
+exports.createPartnerUser = async (req, res) => {
+  try {
+    const { id: partnerId } = req.params;
+    const { username, email, full_name, password, role = 'admin' } = req.body;
+
+    if (!username || !email || !password)
+      return res.status(400).json({ success: false, message: 'username, email and password are required' });
+
+    // Check partner exists
+    const partner = await db.query('SELECT partner_id, partner_name FROM partners WHERE partner_id=$1', [partnerId]);
+    if (!partner.rows.length)
+      return res.status(404).json({ success: false, message: 'Partner not found' });
+
+    const bcrypt = require('bcrypt');
+    const password_hash = await bcrypt.hash(password, 10);
+
+    // Create user with partner_user system_role and no tenant_id
+    const userResult = await db.query(
+      `INSERT INTO users (
+        username, email, full_name, password_hash,
+        is_active, status, system_role, portal_mode, tenant_id
+      ) VALUES ($1,$2,$3,$4,true,'ACTIVE','partner_user','both',NULL)
+      RETURNING user_id, username, email, full_name, is_active, created_at`,
+      [username, email, full_name, password_hash]
+    );
+    const user = userResult.rows[0];
+
+    // Link user to partner
+    await db.query(
+      `INSERT INTO partner_users (partner_id, user_id, role, is_active)
+       VALUES ($1,$2,$3,true)
+       ON CONFLICT (partner_id, user_id) DO UPDATE SET role=$3, is_active=true`,
+      [partnerId, user.user_id, role]
+    );
+
+    res.status(201).json({ success: true, data: { ...user, partner_name: partner.rows[0].partner_name, role } });
+  } catch (err) {
+    if (err.code === '23505')
+      return res.status(400).json({ success: false, message: 'Username or email already exists' });
+    console.error('CREATE PARTNER USER ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── PARTNER: TOGGLE USER STATUS ───────────────────────────────
+exports.togglePartnerUserStatus = async (req, res) => {
+  try {
+    const { id: partnerId, userId } = req.params;
+    const { is_active } = req.body;
+
+    // Owner can toggle any partner's user; partner can only toggle their own
+    if (req.user.system_role === 'partner_user' && req.user.partner_id !== partnerId)
+      return res.status(403).json({ success: false, message: 'Access denied' });
+
+    const result = await db.query(
+      `UPDATE users SET is_active=$1 WHERE user_id=$2 RETURNING user_id, username, is_active`,
+      [is_active, userId]
+    );
+    if (!result.rows.length)
+      return res.status(404).json({ success: false, message: 'User not found' });
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    console.error('TOGGLE PARTNER USER ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── PARTNER: CREATE FIRST ADMIN USER IN A TENANT ─────────────
+exports.createTenantAdminUser = async (req, res) => {
+  try {
+    const { id: partnerId, tenantId } = req.params;
+    const { username, email, full_name, password } = req.body;
+
+    if (!username || !email || !password)
+      return res.status(400).json({ success: false, message: 'username, email and password are required' });
+
+    // Verify partner owns this tenant
+    const tenant = await db.query(
+      `SELECT tenant_id, tenant_name FROM tenants WHERE tenant_id=$1 AND partner_id=$2`,
+      [tenantId, partnerId]
+    );
+    if (!tenant.rows.length)
+      return res.status(404).json({ success: false, message: 'Tenant not found or not under this partner' });
+
+    // Get Administrator role for this tenant
+    const roleResult = await db.query(
+      `SELECT role_id FROM roles WHERE tenant_id=$1 AND role_name='Administrator' LIMIT 1`,
+      [tenantId]
+    );
+    if (!roleResult.rows.length)
+      return res.status(400).json({ success: false, message: 'Administrator role not found for this tenant. Configure tenant first.' });
+
+    const bcrypt = require('bcrypt');
+    const password_hash = await bcrypt.hash(password, 10);
+
+    // Create admin user for the tenant
+    const userResult = await db.query(
+      `INSERT INTO users (
+        username, email, full_name, password_hash,
+        is_active, status, system_role, portal_mode, tenant_id, is_super_admin
+      ) VALUES ($1,$2,$3,$4,true,'ACTIVE','tenant_user','b2b',$5,false)
+      RETURNING user_id, username, email, full_name, is_active, created_at`,
+      [username, email, full_name, password_hash, tenantId]
+    );
+    const user = userResult.rows[0];
+
+    // Assign Administrator role
+    await db.query(
+      `INSERT INTO user_roles (user_role_id, user_id, role_id)
+       VALUES (gen_random_uuid(),$1,$2)
+       ON CONFLICT DO NOTHING`,
+      [user.user_id, roleResult.rows[0].role_id]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: { ...user, role: 'Administrator', tenant_name: tenant.rows[0].tenant_name }
+    });
+  } catch (err) {
+    if (err.code === '23505')
+      return res.status(400).json({ success: false, message: 'Username or email already exists' });
+    console.error('CREATE TENANT ADMIN ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── PARTNER: GET PARTNER PROFILE ──────────────────────────────
+exports.getPartnerProfile = async (req, res) => {
+  try {
+    const { system_role, partner_id: userPartnerId } = req.user;
+    const { id } = req.params;
+
+    // Partner can only see their own profile
+    if (system_role === 'partner_user' && userPartnerId !== id)
+      return res.status(403).json({ success: false, message: 'Access denied' });
+
+    const result = await db.query(
+      `SELECT p.*,
+         (SELECT COUNT(*) FROM tenants t WHERE t.partner_id = p.partner_id AND t.is_test=false) AS active_tenant_count,
+         (SELECT COUNT(*) FROM tenants t WHERE t.partner_id = p.partner_id AND t.is_test=true)  AS test_tenant_count,
+         (SELECT COUNT(*) FROM partner_users pu WHERE pu.partner_id = p.partner_id)              AS user_count
+       FROM partners p WHERE p.partner_id=$1`, [id]
+    );
+    if (!result.rows.length)
+      return res.status(404).json({ success: false, message: 'Partner not found' });
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    console.error('GET PARTNER PROFILE ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── PARTNER: UPDATE OWN BRANDING/SETTINGS ────────────────────
+exports.updatePartnerProfile = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { system_role, partner_id: userPartnerId } = req.user;
+
+    if (system_role === 'partner_user' && userPartnerId !== id)
+      return res.status(403).json({ success: false, message: 'Access denied' });
+
+    const {
+      partner_name, email, phone,
+      logo_url, app_name, primary_color,
+      default_currency, default_language, default_unit
+    } = req.body;
+
+    const result = await db.query(
+      `UPDATE partners SET
+        partner_name     = COALESCE($1,  partner_name),
+        email            = COALESCE($2,  email),
+        phone            = COALESCE($3,  phone),
+        logo_url         = COALESCE($4,  logo_url),
+        app_name         = COALESCE($5,  app_name),
+        primary_color    = COALESCE($6,  primary_color),
+        default_currency = COALESCE($7,  default_currency),
+        default_language = COALESCE($8,  default_language),
+        default_unit     = COALESCE($9,  default_unit),
+        updated_at       = NOW()
+       WHERE partner_id=$10 RETURNING *`,
+      [partner_name, email, phone, logo_url, app_name, primary_color,
+       default_currency, default_language, default_unit, id]
+    );
+    if (!result.rows.length)
+      return res.status(404).json({ success: false, message: 'Partner not found' });
+
+    res.json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    console.error('UPDATE PARTNER PROFILE ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
