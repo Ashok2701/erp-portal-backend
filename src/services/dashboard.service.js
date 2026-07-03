@@ -270,6 +270,7 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
   let deliveredOrders     = 0;
   let pendingPaymentsAmt  = 0;
   let totalAmountPeriod   = 0;
+  let unexpiredQuotes     = 0;
 
   try {
     const erpUser   = { ...user, ...dbUser, user_id: uid };
@@ -289,6 +290,19 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
             AND ORDDAT_0 BETWEEN @dateFrom AND @dateTo
         `);
       salesOrdersCount = Number(soRes.recordset[0]?.cnt || 0);
+
+      // Unexpired Quotes — SQHNUM from SQUOTE where QUODAT_0 >= today
+      try {
+        const quotRes = await pool.request()
+          .input("custQ", sql.NVarChar, customerCode)
+          .query(\`
+            SELECT COUNT(*) AS cnt
+            FROM LEWISB.SQUOTE
+            WHERE BPCORD_0 = @custQ
+              AND QUODAT_0 >= CAST(GETDATE() AS DATE)
+          \`);
+        unexpiredQuotes = Number(quotRes.recordset[0]?.cnt || 0);
+      } catch (_) {}
 
       // Orders in Dispatch = SDELIVERY where VCRSTA_0 = 1 (in progress, not yet delivered)
       const dispRes = await pool.request()
@@ -412,6 +426,8 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
       orders_in_dispatch:      ordersInDispatch,
       delivered_orders:        deliveredOrders,
       pending_payments_amount: pendingPaymentsAmt,
+      total_payment_due:       pendingPaymentsAmt, // same field — total outstanding
+      unexpired_quotes:        unexpiredQuotes,
       total_amount:            totalAmountPeriod,
       currency: "USD",
     },

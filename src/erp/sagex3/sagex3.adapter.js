@@ -72,6 +72,77 @@ class SageX3Adapter extends BaseERPAdapter {
     return this.getCustomerAddressesFromDB(customerCode);
   }
 
+  async getCustomerDetail(customerCode) {
+    const pool = await this.poolPromise;
+    const { sql } = require("mssql");
+    const req = pool.request();
+    req.input("code", sql.VarChar, customerCode);
+
+    // Main customer record
+    const custResult = await req.query(`
+      SELECT
+        BP.BPCNUM_0  AS customer_code,
+        BP.BPCNAM_0  AS customer_name,
+        BP.IVCUR_0   AS currency,
+        BP.STOFCY_0  AS site,
+        BP.CRE_0     AS credit_limit,
+        BP.VACBPR_0  AS eu_vat_number,
+        BP.TAXID_0   AS tax_id,
+        BP.NAF_0     AS sic_code,
+        BP.BPCTYP_0  AS customer_type,
+        BP.PRITYP_0  AS price_type,
+        ISNULL(BP.WEB_0,'') AS email,
+        ISNULL(BP.TEL_0,'') AS phone,
+        ISNULL(BP.CTC_0,'') AS contact_ref
+      FROM LEWISB.BPCUSTOMER BP
+      WHERE BP.BPCNUM_0 = @code
+    `);
+
+    // Addresses
+    const addrResult = await pool.request().input("code2", sql.VarChar, customerCode).query(`
+      SELECT
+        BPAADD_0    AS address_code,
+        BPADES_0    AS address_name,
+        BPAADDLIG_0 AS line1,
+        BPAADDLIG_1 AS line2,
+        BPAADDLIG_2 AS line3,
+        POSCOD_0    AS postal_code,
+        CTY_0       AS city,
+        SAT_0       AS state,
+        CRYNAM_0    AS country,
+        TEL_0       AS phone,
+        WEB_0       AS email,
+        BPAADD_0 = (
+          SELECT TOP 1 BPAADDADD_0 FROM LEWISB.BPCUSTOMER WHERE BPCNUM_0=@code2
+        ) AS is_default
+      FROM LEWISB.BPADDRESS
+      WHERE BPANUM_0 = @code2
+      ORDER BY is_default DESC, BPAADD_0
+    `);
+
+    // Recent orders summary
+    const ordersResult = await pool.request().input("code3", sql.VarChar, customerCode).query(`
+      SELECT TOP 5
+        SOHNUM_0  AS order_no,
+        ORDDAT_0  AS order_date,
+        TOTORDAMT_0 AS amount,
+        IVCUR_0   AS currency,
+        STOMVTFLG_0 AS status
+      FROM tbs.LEWISB.SORDER
+      WHERE BPCORD_0 = @code3
+      ORDER BY ORDDAT_0 DESC
+    `);
+
+    const customer = custResult.recordset[0] || null;
+    if (!customer) return null;
+
+    return {
+      ...customer,
+      addresses: addrResult.recordset || [],
+      recent_orders: ordersResult.recordset || [],
+    };
+  }
+
   async getSupplierAddresses(supplierCode) {
     return this.getSupplierAddressesFromDB(supplierCode);
   }

@@ -86,6 +86,19 @@ exports.getProductCategories = async (req, res) => {
   }
 };
 
+exports.getCustomerDetail = async (req, res) => {
+  try {
+    const { customerCode } = req.params;
+    const adapter = await require("../erp/erp.factory").getERPAdapterForUser(req.user);
+    const data = await adapter.getCustomerDetail(customerCode);
+    if (!data) return res.status(404).json({ success: false, message: "Customer not found" });
+    res.json({ success: true, data });
+  } catch (err) {
+    console.error("getCustomerDetail:", err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 exports.getCustomerAddresses = async (req, res) => {
   try {
     const { customerCode } = req.params;

@@ -11,6 +11,7 @@ router.get("/products", auth, ctrl.getProducts);
 router.get("/product-categories", auth, ctrl.getProductCategories);
 
  router.get("/customers/:customerCode/addresses", auth, ctrl.getCustomerAddresses);
+router.get("/customers/:customerCode/detail",    auth, ctrl.getCustomerDetail);
  router.get("/suppliers/:supplierCode/addresses", auth, ctrl.getSupplierAddresses);
 
  router.get("/stock", auth, ctrl.getStock);
