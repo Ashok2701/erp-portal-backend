@@ -268,3 +268,85 @@ exports.testConnection = async (req, res) => {
     res.status(500).json({ success: false, message: `Connection failed: ${err.message}` });
   }
 };
+
+// ── CREATE TENANT USER (from tenant detail page) ──────────────
+exports.createTenantUser = async (req, res) => {
+  try {
+    const { id: tenantId } = req.params;
+
+    if (req.user.system_role === 'partner_user') {
+      const allowed = await verifyPartnerAccess(req, tenantId);
+      if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const { username, email, full_name, password, role_name = 'Customer', portal_mode = 'b2c' } = req.body;
+    if (!username || !email || !password)
+      return res.status(400).json({ success: false, message: 'username, email and password required' });
+
+    const bcrypt = require('bcrypt');
+    const hash   = await bcrypt.hash(password, 10);
+
+    const userResult = await db.query(
+      `INSERT INTO users (username, email, full_name, password_hash, is_active, status,
+        system_role, portal_mode, tenant_id)
+       VALUES ($1,$2,$3,$4,true,'ACTIVE','tenant_user',$5,$6)
+       RETURNING user_id, username, email, full_name, is_active, status, created_at`,
+      [username, email, full_name, hash, portal_mode, tenantId]
+    );
+    const user = userResult.rows[0];
+
+    // Find and assign the requested role
+    const roleRes = await db.query(
+      `SELECT role_id FROM roles
+       WHERE (tenant_id=$1 OR tenant_id IS NULL)
+       AND LOWER(role_name) = LOWER($2) LIMIT 1`,
+      [tenantId, role_name]
+    );
+    if (roleRes.rows.length) {
+      await db.query(
+        `INSERT INTO user_roles (user_role_id, user_id, role_id)
+         VALUES (gen_random_uuid(),$1,$2) ON CONFLICT DO NOTHING`,
+        [user.user_id, roleRes.rows[0].role_id]
+      );
+    }
+
+    res.status(201).json({ success: true, data: { ...user, role_name } });
+  } catch (err) {
+    if (err.code === '23505')
+      return res.status(400).json({ success: false, message: 'Username or email already exists' });
+    console.error('CREATE TENANT USER ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── RESET TENANT USER PASSWORD ────────────────────────────────
+exports.resetTenantUserPassword = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { password } = req.body;
+    if (!password || password.length < 8)
+      return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
+
+    const bcrypt = require('bcrypt');
+    const hash   = await bcrypt.hash(password, 10);
+
+    await db.query('UPDATE users SET password_hash=$1 WHERE user_id=$2', [hash, userId]);
+    res.json({ success: true, message: 'Password reset successfully' });
+  } catch (err) {
+    console.error('RESET PASSWORD ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── TOGGLE TENANT USER STATUS ─────────────────────────────────
+exports.toggleTenantUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { is_active } = req.body;
+    await db.query('UPDATE users SET is_active=$1 WHERE user_id=$2', [is_active, userId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('TOGGLE USER ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
