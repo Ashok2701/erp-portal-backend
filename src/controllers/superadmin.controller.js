@@ -5,6 +5,29 @@ const ERPFactory          = require("../erp/erp.factory");
 const emailService        = require("../services/email.service");
 
 // ── LIST ALL TENANTS ─────────────────────────────────────────
+// ── HELPER: verify partner can access this tenant ────────────
+async function verifyPartnerAccess(req, tenantId) {
+  const { system_role, user_id } = req.user;
+  if (system_role === 'owner' || req.user.is_super_admin) return true;
+  if (system_role !== 'partner_user') return false;
+
+  // Get partner_id for this user
+  const pu = await db.query(
+    'SELECT partner_id FROM partner_users WHERE user_id=$1 AND is_active=true LIMIT 1',
+    [user_id]
+  );
+  if (!pu.rows.length) return false;
+
+  const partnerId = pu.rows[0].partner_id;
+
+  // Check tenant belongs to this partner
+  const t = await db.query(
+    'SELECT tenant_id FROM tenants WHERE tenant_id=$1 AND partner_id=$2',
+    [tenantId, partnerId]
+  );
+  return t.rows.length > 0;
+}
+
 exports.listTenants = async (req, res) => {
   try {
     const { system_role, user_id } = req.user;
@@ -53,6 +76,13 @@ exports.listTenants = async (req, res) => {
 exports.getTenant = async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Partner users can only access their own tenants
+    if (req.user.system_role === 'partner_user') {
+      const allowed = await verifyPartnerAccess(req, id);
+      if (!allowed) return res.status(403).json({ success: false, message: 'Access denied — tenant not under your partner account' });
+    }
+
     const t = await db.query("SELECT * FROM tenants WHERE tenant_id=$1", [id]);
     if (!t.rows.length) return res.status(404).json({ success: false, message: "Tenant not found" });
 
@@ -116,6 +146,11 @@ exports.createTenant = async (req, res) => {
 exports.updateTenant = async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (req.user.system_role === 'partner_user') {
+      const allowed = await verifyPartnerAccess(req, id);
+      if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    }
     const { name, plan, is_active } = req.body;
 
     const result = await db.query(
@@ -139,6 +174,11 @@ exports.upsertSettings = async (req, res) => {
   try {
     const { id } = req.params;
 
+    if (req.user.system_role === 'partner_user') {
+      const allowed = await verifyPartnerAccess(req, id);
+      if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
     // Don't overwrite passwords if masked value sent
     const body = { ...req.body };
     ["erp_db_password", "x3_password", "smtp_password"].forEach(field => {
@@ -161,6 +201,11 @@ exports.upsertSettings = async (req, res) => {
 exports.getTenantUsers = async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (req.user.system_role === 'partner_user') {
+      const allowed = await verifyPartnerAccess(req, id);
+      if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    }
     const result = await db.query(
       `SELECT u.user_id, u.username, u.full_name, u.email,
               u.status, u.is_active, u.portal_mode,
@@ -183,6 +228,11 @@ exports.assignAdmin = async (req, res) => {
     const { id } = req.params;
     const { user_id } = req.body;
 
+    if (req.user.system_role === 'partner_user') {
+      const allowed = await verifyPartnerAccess(req, id);
+      if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
     // Get Administrator role for this tenant
     const roleResult = await db.query(
       `SELECT role_id FROM roles WHERE LOWER(role_name) LIKE '%admin%' AND (tenant_id=$1 OR tenant_id IS NULL) LIMIT 1`,
@@ -204,6 +254,11 @@ exports.assignAdmin = async (req, res) => {
 exports.testConnection = async (req, res) => {
   try {
     const { id } = req.params;
+
+    if (req.user.system_role === 'partner_user') {
+      const allowed = await verifyPartnerAccess(req, id);
+      if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    }
     const settings = await TenantSettingsModel.getTenantSettings(id);
     ERPFactory.clearAdapterCache(id);
     const adapter = await ERPFactory.getERPAdapterForUser({ tenant_id: id });
