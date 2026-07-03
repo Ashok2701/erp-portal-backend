@@ -23,7 +23,21 @@ const partnerRoutes     = require("./routes/partner.routes");
 
 const app = express();
 
-app.use(cors());
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+    const allowed = [
+      process.env.FRONTEND_URL,
+      'https://shark-app-tt8ea.ondigitalocean.app',
+      'http://localhost:3000',
+      'http://localhost:3001',
+    ].filter(Boolean);
+    if (allowed.some(u => origin.startsWith(u))) return callback(null, true);
+    callback(new Error('CORS: origin not allowed: ' + origin));
+  },
+  credentials: true,
+}));
 app.use(express.json());
 
 app.use("/auth", authRoutes); 
