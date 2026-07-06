@@ -112,7 +112,16 @@ function getSpacesUrl(key) {
 }
 
 // Default export — general content upload (public-read)
-const upload = createUpload("content");
+// Guard: if Spaces env vars not configured, export a no-op to prevent startup crash
+let upload;
+if (process.env.SPACES_BUCKET && process.env.SPACES_KEY && process.env.SPACES_SECRET) {
+  upload = createUpload("content");
+} else {
+  // No-op middleware when Spaces not configured (dev/test environment)
+  const multer = require("multer");
+  upload = multer({ storage: multer.memoryStorage() });
+  console.warn("[uploadSpaces] SPACES env vars not set — using memory storage fallback");
+}
 module.exports = upload;
 module.exports.createUpload      = createUpload;
 module.exports.deleteFromSpaces  = deleteFromSpaces;
