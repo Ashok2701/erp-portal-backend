@@ -71,7 +71,7 @@ exports.uploadDocument = async (admin, file, body) => {
 
   const safeName   = file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_");
   const tenantSlug = admin.tenant_slug || "temaglobal";
-  const key        = `${tenantSlug}/LegalDocs/${safeName}`;
+  const key        = `tenants/${tenantSlug}/legaldocs/${safeName}`;
 
 
 

@@ -4,6 +4,7 @@ const router   = express.Router();
 const ctrl     = require("../controllers/partner.controller");
 const auth     = require("../middleware/auth.middleware");
 const { ownerOnly, partnerOnly, injectPartnerScope } = require("../middleware/partner.middleware");
+const { validate, schemas } = require("../middleware/validation.middleware");
 
 // ── PUBLIC ───────────────────────────────────────────────────
 router.get("/config/branding", ctrl.getBrandingConfig);
@@ -18,7 +19,7 @@ router.put  ("/owners/:userId", auth, ownerOnly, ctrl.toggleOwnerStatus);
 
 // ── OWNER ONLY — full partner management ─────────────────────
 router.get  ("/",    auth, ownerOnly, ctrl.listPartners);
-router.post ("/",    auth, ownerOnly, ctrl.createPartner);
+router.post ("/",    auth, ownerOnly, validate(schemas.createPartner), ctrl.createPartner);
 
 // ── PARTNER PROFILE — owner or the partner themselves ─────────
 router.get  ("/:id/profile", auth, partnerOnly, injectPartnerScope, ctrl.getPartnerProfile);
@@ -26,11 +27,11 @@ router.put  ("/:id/profile", auth, partnerOnly, injectPartnerScope, ctrl.updateP
 
 // ── OWNER ONLY — view/edit any partner ───────────────────────
 router.get  ("/:id",         auth, ownerOnly, ctrl.getPartner);
-router.put  ("/:id",         auth, ownerOnly, ctrl.updatePartner);
+router.put  ("/:id",         auth, ownerOnly, validate(schemas.updatePartner), ctrl.updatePartner);
 
 // ── PARTNER USERS — owner creates, both can view/toggle ──────
 router.get  ("/:id/users",          auth, partnerOnly, injectPartnerScope, ctrl.getPartnerUsers);
-router.post ("/:id/users",          auth, ownerOnly,   ctrl.createPartnerUser);
+router.post ("/:id/users",          auth, ownerOnly,   validate(schemas.createUser), ctrl.createPartnerUser);
 router.put  ("/:id/users/:userId",  auth, ownerOnly,   ctrl.togglePartnerUserStatus);
 
 // ── TENANT MANAGEMENT ─────────────────────────────────────────
