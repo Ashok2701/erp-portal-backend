@@ -291,16 +291,11 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
         `);
       salesOrdersCount = Number(soRes.recordset[0]?.cnt || 0);
 
-      // Unexpired Quotes — SQHNUM from SQUOTE where QUODAT_0 >= today
+      // Unexpired Quotes — SQUOTE where QUODAT_0 >= today
       try {
         const quotRes = await pool.request()
-          .input("custQ", sql.NVarChar, customerCode)
-          .query(\`
-            SELECT COUNT(*) AS cnt
-            FROM LEWISB.SQUOTE
-            WHERE BPCORD_0 = @custQ
-              AND QUODAT_0 >= CAST(GETDATE() AS DATE)
-          \`);
+          .input('custQ', sql.NVarChar, customerCode)
+          .query('SELECT COUNT(*) AS cnt FROM LEWISB.SQUOTE WHERE BPCORD_0 = @custQ AND QUODAT_0 >= CAST(GETDATE() AS DATE)');
         unexpiredQuotes = Number(quotRes.recordset[0]?.cnt || 0);
       } catch (_) {}
 
