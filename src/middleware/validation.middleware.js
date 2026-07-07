@@ -26,6 +26,7 @@ const validate = (schema, target = "body") => {
 const f = {
   uuid:     Joi.string().uuid({ version: "uuidv4" }),
   str:      (max = 200) => Joi.string().trim().max(max),
+  username: Joi.string().trim().pattern(/^[a-zA-Z0-9._-]+$/).max(50).messages({ 'string.pattern.base': 'Username can only contain letters, numbers, dots, hyphens and underscores (no spaces)' }),
   email:    Joi.string().email({ tlds: { allow: false } }).trim().lowercase(),
   password: Joi.string().min(8).max(128),
   slug:     Joi.string().lowercase().pattern(/^[a-z0-9-]+$/).max(100),
@@ -55,7 +56,7 @@ const schemas = {
 
   // SIGNUP
   signup: Joi.object({
-    username:        f.str().required(),
+    username:        f.username.required(),
     email:           f.email.required(),
     full_name:       f.str().required(),
     password:        f.password.required(),
@@ -148,7 +149,7 @@ const schemas = {
 
   // USERS
   createUser: Joi.object({
-    username:        f.str().required(),
+    username:        f.username.required(),
     email:           f.email.required(),
     full_name:       f.str().optional().allow("", null),
     password:        f.password.required(),
