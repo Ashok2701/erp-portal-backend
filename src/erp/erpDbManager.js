@@ -7,14 +7,18 @@ const pools = {};
 
 exports.getErpDbPool = async (settings) => {
   // ── Config validation — return clear errors before attempting connection ──
-  if (!settings.erp_db_host || !settings.erp_db_host.trim()) {
-    const err = new Error("ERP database not configured. Please contact your administrator to set up the ERP connection.");
-    err.code  = "ERP_NOT_CONFIGURED";
-    throw err;
-  }
-  if (!settings.erp_db_name || !settings.erp_db_name.trim()) {
-    const err = new Error("ERP database name missing. Please contact your administrator.");
-    err.code  = "ERP_NOT_CONFIGURED";
+  const missing = [];
+  if (!settings.erp_db_host     || !String(settings.erp_db_host).trim())     missing.push("Database host (erp_db_host)");
+  if (!settings.erp_db_name     || !String(settings.erp_db_name).trim())     missing.push("Database name (erp_db_name)");
+  if (!settings.erp_db_user     || !String(settings.erp_db_user).trim())     missing.push("Database user (erp_db_user)");
+  if (!settings.erp_db_password || !String(settings.erp_db_password).trim()) missing.push("Database password (erp_db_password)");
+
+  if (missing.length > 0) {
+    const err = new Error(
+      "ERP database not configured. Missing: " + missing.join(", ") +
+      ". Please contact your administrator to complete the ERP setup."
+    );
+    err.code = "ERP_NOT_CONFIGURED";
     throw err;
   }
 
