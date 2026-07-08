@@ -6,6 +6,18 @@ const mssql = require("mssql");
 const pools = {};
 
 exports.getErpDbPool = async (settings) => {
+  // ── Config validation — return clear errors before attempting connection ──
+  if (!settings.erp_db_host || !settings.erp_db_host.trim()) {
+    const err = new Error("ERP database not configured. Please contact your administrator to set up the ERP connection.");
+    err.code  = "ERP_NOT_CONFIGURED";
+    throw err;
+  }
+  if (!settings.erp_db_name || !settings.erp_db_name.trim()) {
+    const err = new Error("ERP database name missing. Please contact your administrator.");
+    err.code  = "ERP_NOT_CONFIGURED";
+    throw err;
+  }
+
   const key = `${settings.tenant_id || "default"}_${settings.erp_db_host}_${settings.erp_db_name}`;
 
   if (pools[key]) return pools[key];

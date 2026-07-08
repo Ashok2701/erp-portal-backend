@@ -86,6 +86,19 @@ exports.getProductCategories = async (req, res) => {
   }
 };
 
+exports.getConfigStatus = async (req, res) => {
+  try {
+    const TenantSettingsModel = require("../models/tenantSettings.model");
+    const { tenant_id } = req.user;
+    if (!tenant_id) return res.json({ success: true, data: { isReady: true, missing: [] } });
+    const status = await TenantSettingsModel.getConfigStatus(tenant_id);
+    res.json({ success: true, data: status });
+  } catch (err) {
+    console.error("getConfigStatus:", err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 exports.getCustomerDetail = async (req, res) => {
   try {
     const { customerCode } = req.params;
