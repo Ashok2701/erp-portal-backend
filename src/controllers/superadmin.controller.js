@@ -296,12 +296,70 @@ exports.createTenantUser = async (req, res) => {
     const user = userResult.rows[0];
 
     // Find and assign the requested role
-    const roleRes = await db.query(
+    // First try tenant-specific role, then fall back to global roles
+    let roleRes = await db.query(
       `SELECT role_id FROM roles
-       WHERE (tenant_id=$1 OR tenant_id IS NULL)
-       AND LOWER(role_name) = LOWER($2) LIMIT 1`,
+       WHERE tenant_id=$1 AND LOWER(role_name) = LOWER($2) LIMIT 1`,
       [tenantId, role_name]
     );
+
+    // If no tenant-specific role found, auto-create default roles for this tenant
+    if (!roleRes.rows.length) {
+      const defaultRoles = [
+        { code: 'ADMINISTRATOR', name: 'Administrator' },
+        { code: 'CUSTOMER',      name: 'Customer'      },
+        { code: 'B2B_CUSTOMER',  name: 'B2B Customer'  },
+        { code: 'SUPPLIER',      name: 'Supplier'      },
+      ];
+      for (const r of defaultRoles) {
+        await db.query(
+          `INSERT INTO roles (role_id, role_code, role_name, is_active, tenant_id, description)
+           VALUES (gen_random_uuid(),$1,$2,true,$3,$2 || ' role for tenant')
+           ON CONFLICT DO NOTHING`,
+          [r.code, r.name, tenantId]
+        );
+      }
+      // Now assign default modules to roles
+      const moduleAssignments = {
+        'Administrator': ['Dashboard','Products','Orders','Invoices','Payments','Deliveries',
+                         'Sales Requests','Sales Quote','Content Management','Users','Roles',
+                         'Role Modules','Modules','Purchase Requests','Stock','Maintenance',
+                         'Available','Consignment','In Transit','Reserved','Stock Requests'],
+        'B2B Customer':  ['Dashboard','Orders','Invoices','Payments','Deliveries',
+                         'Sales Requests','Sales Quote','Content Management',
+                         'Available','Consignment','In Transit','Reserved','Stock Requests'],
+        'Customer':      ['Dashboard','Products','Orders','Invoices','Payments',
+                         'Deliveries','Sales Requests','Sales Quote','Content Management'],
+        'Supplier':      ['Dashboard','Purchase Requests','Content Management'],
+      };
+      for (const [roleName, modules] of Object.entries(moduleAssignments)) {
+        const rr = await db.query(
+          `SELECT role_id FROM roles WHERE tenant_id=$1 AND role_name=$2 LIMIT 1`,
+          [tenantId, roleName]
+        );
+        if (!rr.rows.length) continue;
+        const rid = rr.rows[0].role_id;
+        for (const modName of modules) {
+          await db.query(
+            `INSERT INTO role_modules (role_module_id, role_id, module_id, can_view, can_create, can_edit, can_delete)
+             SELECT gen_random_uuid(), $1, module_id, true,
+               CASE WHEN $2 = 'Administrator' THEN true ELSE false END,
+               CASE WHEN $2 = 'Administrator' THEN true ELSE false END,
+               CASE WHEN $2 = 'Administrator' THEN true ELSE false END
+             FROM modules WHERE module_name=$3
+             ON CONFLICT DO NOTHING`,
+            [rid, roleName, modName]
+          );
+        }
+      }
+      // Re-query the role
+      roleRes = await db.query(
+        `SELECT role_id FROM roles
+         WHERE tenant_id=$1 AND LOWER(role_name) = LOWER($2) LIMIT 1`,
+        [tenantId, role_name]
+      );
+    }
+
     if (roleRes.rows.length) {
       await db.query(
         `INSERT INTO user_roles (user_role_id, user_id, role_id)

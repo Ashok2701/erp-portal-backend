@@ -218,6 +218,22 @@ exports.createTenantUnderPartner = async (req, res) => {
       [tenant.tenant_id, cleanSlug]
     );
 
+    // Auto-create default roles for this tenant
+    const defaultRoles = [
+      { code: 'ADMINISTRATOR', name: 'Administrator' },
+      { code: 'CUSTOMER',      name: 'Customer'      },
+      { code: 'B2B_CUSTOMER',  name: 'B2B Customer'  },
+      { code: 'SUPPLIER',      name: 'Supplier'      },
+    ];
+    for (const r of defaultRoles) {
+      await db.query(
+        `INSERT INTO roles (role_id, role_code, role_name, is_active, tenant_id, description)
+         VALUES (gen_random_uuid(),$1,$2,true,$3,$2 || ' role')
+         ON CONFLICT DO NOTHING`,
+        [r.code, r.name, tenant.tenant_id]
+      );
+    }
+
     res.status(201).json({ success: true, data: tenant });
   } catch (err) {
     if (err.code === "23505")
