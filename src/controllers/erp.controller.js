@@ -164,3 +164,122 @@ exports.getAllSites = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+// ── CONSIGNMENT CONSUMPTION ──────────────────────────────────
+exports.recordConsumption = async (req, res) => {
+  try {
+    const { product_code, quantity, site, note } = req.body;
+    if (!product_code || !quantity)
+      return res.status(400).json({ success: false, message: "product_code and quantity required" });
+
+    const result = await require("../config/db").query(
+      `INSERT INTO consignment_consumption
+         (tenant_id, user_id, customer_code, product_code, quantity, site, note, consumed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+       RETURNING *`,
+      [req.user.tenant_id, req.user.user_id,
+       req.user.erp_entity_code, product_code,
+       parseFloat(quantity), site || null, note || null]
+    );
+    res.status(201).json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    console.error("RECORD CONSUMPTION ERROR:", err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── REPLENISHMENT REQUEST ────────────────────────────────────
+exports.requestReplenishment = async (req, res) => {
+  try {
+    const { product_code, quantity, site, notes } = req.body;
+    if (!product_code || !quantity)
+      return res.status(400).json({ success: false, message: "product_code and quantity required" });
+
+    const result = await require("../config/db").query(
+      `INSERT INTO replenishment_requests
+         (tenant_id, user_id, customer_code, product_code, quantity, site, notes, status, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'PENDING',NOW())
+       RETURNING *`,
+      [req.user.tenant_id, req.user.user_id,
+       req.user.erp_entity_code, product_code,
+       parseFloat(quantity), site || null, notes || null]
+    );
+    res.status(201).json({ success: true, data: result.rows[0] });
+  } catch (err) {
+    console.error("REPLENISHMENT ERROR:", err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── ACCOUNT STATEMENT ────────────────────────────────────────
+exports.getStatement = async (req, res) => {
+  try {
+    const adapter      = await require("../erp/erp.factory").getERPAdapterForUser(req.user);
+    const customerCode = req.user.erp_entity_code || req.user.erp_customer_code;
+    if (!customerCode)
+      return res.status(400).json({ success: false, message: "No customer code on account" });
+
+    // Get all invoices and payments from X3
+    const [invoices, payments] = await Promise.all([
+      adapter.getAllInvoices(req),
+      adapter.getAllPayments(req),
+    ]);
+
+    const totalInvoiced = invoices.reduce((s, i) =>
+      s + parseFloat(i.AMTATI_0 || i.TOTATI_0 || i.total_amount || 0), 0);
+    const totalPaid = payments.reduce((s, p) =>
+      s + parseFloat(p.AMTCUR_0 || p.amount || 0), 0);
+
+    res.json({
+      success: true,
+      data: {
+        customer_code: customerCode,
+        total_invoiced: totalInvoiced,
+        total_paid:     totalPaid,
+        balance_due:    totalInvoiced - totalPaid,
+        invoices,
+        payments,
+      }
+    });
+  } catch (err) {
+    if (err.code === "ERP_NOT_CONFIGURED")
+      return res.status(503).json({ success: false, message: err.message });
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── CONSIGNMENT DASHBOARD KPIs ────────────────────────────────
+exports.getConsignmentDashboard = async (req, res) => {
+  try {
+    const db           = require("../config/db");
+    const { tenant_id, user_id } = req.user;
+
+    const [consumed, replenish] = await Promise.all([
+      db.query(
+        `SELECT COALESCE(SUM(quantity),0) AS total, COUNT(*) AS count
+         FROM consignment_consumption
+         WHERE tenant_id=$1 AND user_id=$2
+           AND consumed_at >= DATE_TRUNC('month', NOW())`,
+        [tenant_id, user_id]
+      ),
+      db.query(
+        `SELECT COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE status='PENDING') AS pending
+         FROM replenishment_requests
+         WHERE tenant_id=$1 AND user_id=$2`,
+        [tenant_id, user_id]
+      ),
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        consumed_this_month: Number(consumed.rows[0]?.total || 0),
+        consumption_records: Number(consumed.rows[0]?.count || 0),
+        replenishment_total:   Number(replenish.rows[0]?.total   || 0),
+        replenishment_pending: Number(replenish.rows[0]?.pending  || 0),
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

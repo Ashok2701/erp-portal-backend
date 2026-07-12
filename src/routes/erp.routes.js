@@ -17,4 +17,12 @@ router.get("/config-status",                     auth, ctrl.getConfigStatus);
 
  router.get("/stock", auth, ctrl.getStock);
  router.get("/sites", auth, ctrl.getAllSites);
+// Consignment loop
+router.post("/consignment/consume",   auth, ctrl.recordConsumption);
+router.post("/consignment/replenish", auth, ctrl.requestReplenishment);
+router.get ("/consignment/dashboard", auth, ctrl.getConsignmentDashboard);
+
+// Account statement
+router.get ("/statement", auth, ctrl.getStatement);
+
 module.exports = router;

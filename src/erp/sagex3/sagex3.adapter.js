@@ -1640,3 +1640,134 @@ class SageX3Adapter extends BaseERPAdapter {
 }
 
 module.exports = SageX3Adapter;
+  // ── PURCHASE ORDERS (Supplier Portal) ────────────────────────
+  async getAllPurchaseOrders(supplierCode, filters = {}) {
+    const pool = await this.poolPromise;
+    if (!supplierCode) return [];
+
+    const req = pool.request();
+    req.input('supplierCode', sql.NVarChar, supplierCode);
+
+    const result = await req.query(`
+      SELECT TOP 100
+        P.PSHNUM_0   AS po_number,
+        P.BPSNUM_0   AS supplier_code,
+        BP.BPSNAM_0  AS supplier_name,
+        P.POHTYP_0   AS po_type,
+        P.ORDDAT_0   AS order_date,
+        P.RCPDAT_0   AS expected_date,
+        P.IPTFCY_0   AS site,
+        P.CUR_0      AS currency,
+        P.ORDNOT_0   AS total_before_tax,
+        P.ORDATI_0   AS total_after_tax,
+        P.PSHSTA_0   AS status,
+        P.INVSTA_0   AS invoice_status,
+        P.RCPSTA_0   AS receipt_status
+      FROM tbs.LEWISB.PORDER P
+      LEFT JOIN LEWISB.BPSUPPLIER BP ON BP.BPSNUM_0 = P.BPSNUM_0
+      WHERE P.BPSNUM_0 = @supplierCode
+      ORDER BY P.ORDDAT_0 DESC
+    `);
+
+    const orders = result.recordset;
+
+    // Fetch line items for each PO
+    for (const po of orders) {
+      const lineResult = await pool.request()
+        .input('poNum', sql.NVarChar, po.po_number)
+        .query(`
+          SELECT
+            L.ITMREF_0   AS product_code,
+            L.ITMDES1_0  AS description,
+            L.QTYUOM_0   AS ordered_qty,
+            L.RCPQTY_0   AS received_qty,
+            L.SAU_0      AS unit,
+            L.GROPRI_0   AS unit_price,
+            (L.QTYUOM_0 * L.GROPRI_0) AS line_total,
+            L.EXTDLVDAT_0 AS expected_date
+          FROM tbs.LEWISB.PORDERQ L
+          WHERE L.PSHNUM_0 = @poNum
+        `);
+      po.lines = lineResult.recordset;
+    }
+
+    return orders;
+  }
+
+  async getPurchaseOrderDetail(poNumber) {
+    const pool = await this.poolPromise;
+    if (!poNumber) return null;
+
+    const result = await pool.request()
+      .input('poNum', sql.NVarChar, poNumber)
+      .query(`
+        SELECT
+          P.PSHNUM_0   AS po_number,
+          P.BPSNUM_0   AS supplier_code,
+          BP.BPSNAM_0  AS supplier_name,
+          P.POHTYP_0   AS po_type,
+          P.ORDDAT_0   AS order_date,
+          P.RCPDAT_0   AS expected_date,
+          P.IPTFCY_0   AS site,
+          P.CUR_0      AS currency,
+          P.ORDNOT_0   AS total_before_tax,
+          P.ORDATI_0   AS total_after_tax,
+          P.PSHSTA_0   AS status,
+          P.INVSTA_0   AS invoice_status,
+          P.RCPSTA_0   AS receipt_status,
+          P.PTE_0      AS payment_terms,
+          F.FCYNAM_0   AS site_name
+        FROM tbs.LEWISB.PORDER P
+        LEFT JOIN LEWISB.BPSUPPLIER BP ON BP.BPSNUM_0 = P.BPSNUM_0
+        LEFT JOIN LEWISB.FACILITY F    ON F.FCY_0 = P.IPTFCY_0
+        WHERE P.PSHNUM_0 = @poNum
+      `);
+
+    if (!result.recordset.length) return null;
+    const po = result.recordset[0];
+
+    const lineResult = await pool.request()
+      .input('poNum2', sql.NVarChar, poNumber)
+      .query(`
+        SELECT
+          L.ITMREF_0    AS product_code,
+          L.ITMDES1_0   AS description,
+          L.QTYUOM_0    AS ordered_qty,
+          L.RCPQTY_0    AS received_qty,
+          (L.QTYUOM_0 - L.RCPQTY_0) AS pending_qty,
+          L.SAU_0       AS unit,
+          L.GROPRI_0    AS unit_price,
+          (L.QTYUOM_0 * L.GROPRI_0) AS line_total,
+          L.EXTDLVDAT_0 AS expected_date
+        FROM tbs.LEWISB.PORDERQ L
+        WHERE L.PSHNUM_0 = @poNum2
+      `);
+
+    po.lines = lineResult.recordset;
+    return po;
+  }
+
+  // ── SUPPLIER CONSIGNMENT (what supplier's stock sits at customers) ────
+  async getSupplierConsignment(supplierCode) {
+    const pool = await this.poolPromise;
+    if (!supplierCode) return [];
+
+    const result = await pool.request()
+      .input('supplierCode', sql.NVarChar, supplierCode)
+      .query(`
+        SELECT
+          S.PRODUCT     AS product_code,
+          S.PROD_DESC   AS description,
+          S.LOCATION    AS customer_code,
+          S.SITE        AS site,
+          S.PHYSICAL_QTY AS physical_qty,
+          S.AVAILABLE_QTY AS available_qty,
+          S.ALLOCATED_QTY AS allocated_qty,
+          S.UNIT        AS unit
+        FROM LEWISB.XSTDALN_STOCK S
+        WHERE S.SUPPLIER = @supplierCode
+        ORDER BY S.LOCATION, S.PRODUCT
+      `);
+
+    return result.recordset;
+  }

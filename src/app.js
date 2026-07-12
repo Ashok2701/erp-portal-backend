@@ -42,6 +42,77 @@ if (process.env.NODE_ENV !== "production") {
 // ── Health check ─────────────────────────────────────────────
 app.get("/health", (_req, res) => res.json({ status: "ok", ts: new Date().toISOString() }));
 
+// ── Auto-create supplier/consignment tables ───────────────────
+(async () => {
+  const db = require("./config/db");
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS purchase_order_actions (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        po_number   VARCHAR(50)  NOT NULL,
+        tenant_id   UUID         NOT NULL,
+        user_id     UUID,
+        action      VARCHAR(20)  NOT NULL CHECK (action IN ('ACCEPTED','REJECTED')),
+        reason      TEXT,
+        asn_data    JSONB,
+        actioned_at TIMESTAMPTZ  DEFAULT NOW(),
+        UNIQUE(po_number, tenant_id)
+      );
+      CREATE TABLE IF NOT EXISTS asn_submissions (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        po_number       VARCHAR(50)  NOT NULL,
+        tenant_id       UUID         NOT NULL,
+        user_id         UUID,
+        expected_date   DATE,
+        tracking_number VARCHAR(100),
+        carrier         VARCHAR(100),
+        lines           JSONB,
+        created_at      TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS supplier_invoices (
+        id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        po_number       VARCHAR(50),
+        tenant_id       UUID         NOT NULL,
+        user_id         UUID,
+        invoice_number  VARCHAR(100),
+        invoice_date    DATE,
+        amount          NUMERIC(18,4) DEFAULT 0,
+        file_url        TEXT,
+        status          VARCHAR(20) DEFAULT 'SUBMITTED'
+                        CHECK (status IN ('SUBMITTED','APPROVED','REJECTED','PAID')),
+        created_at      TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS consignment_consumption (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id     UUID         NOT NULL,
+        user_id       UUID,
+        customer_code VARCHAR(50),
+        product_code  VARCHAR(50)  NOT NULL,
+        quantity      NUMERIC(18,4) NOT NULL,
+        site          VARCHAR(20),
+        note          TEXT,
+        consumed_at   TIMESTAMPTZ  DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS replenishment_requests (
+        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        tenant_id     UUID         NOT NULL,
+        user_id       UUID,
+        customer_code VARCHAR(50),
+        product_code  VARCHAR(50)  NOT NULL,
+        quantity      NUMERIC(18,4) NOT NULL,
+        site          VARCHAR(20),
+        notes         TEXT,
+        status        VARCHAR(20)  DEFAULT 'PENDING'
+                      CHECK (status IN ('PENDING','APPROVED','FULFILLED','REJECTED')),
+        created_at    TIMESTAMPTZ  DEFAULT NOW()
+      );
+    `);
+    logger.info("Supplier/consignment tables ready");
+  } catch (err) {
+    logger.error("Table creation error:", { message: err.message });
+  }
+})();
+
 // ── Routes ───────────────────────────────────────────────────
 // Auth & signup
 app.use("/auth",           require("./routes/auth.routes"));
@@ -82,6 +153,7 @@ app.use("/credit-notes",   require("./routes/creditNotes.routes"));
 app.use("/sales-requests", require("./routes/salesRequest.routes"));
 
 // Other
+app.use("/supplier",       require("./routes/supplier.routes"));
 app.use("/cart",           require("./routes/cart.routes"));
 app.use("/profile",        require("./routes/profile.routes"));
 app.use("/api/chat",       require("./routes/chat.routes"));           // keep /api/chat prefix
