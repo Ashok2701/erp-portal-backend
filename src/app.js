@@ -1,77 +1,94 @@
-const express = require("express");
-const cors = require("cors");
-const cartRoutes = require("./routes/cart.routes");
-const authRoutes = require("./routes/auth.routes");
-const adminRoutes = require("./routes/admin.routes");
-const profileRoutes = require("./routes/profile.routes");
-const salesRequestRoutes = require("./routes/salesRequest.routes");
-const roleModuleRoutes = require("./routes/roleModule.routes");
-const chatRoutes = require("./routes/chat.routes");
-const salesQuoteRoutes = require("./routes/salesQuote.routes");
-const salesOrderRoutes = require("./routes/salesOrder.routes");
-const salesInvoiceRoutes = require("./routes/salesInvoice.routes");
-const PaymentRoutes = require("./routes/payment.routes");
-const dashboardRoutes = require("./routes/dashboard.routes");
-const contentRoutes = require("./routes/content.routes");
-const signupRoutes = require("./routes/signup.routes");
-const documentsRoutes = require("./routes/documents.routes");
-const salesDeliveries = require("./routes/salesDeliveries.routes");
-const inventoryRoutes   = require("./routes/inventory.routes");
-const superadminRoutes  = require("./routes/superadmin.routes");
-const maintenanceRoutes = require("./routes/maintenance.routes");
-const partnerRoutes     = require("./routes/partner.routes");
+"use strict";
+const express  = require("express");
+const cors     = require("cors");
+const crypto   = require("crypto");
+const logger   = require("./utils/logger");
+const { globalErrorHandler, notFoundHandler } = require("./middleware/errorHandler.middleware");
 
 const app = express();
 
+// ── Request ID ──────────────────────────────────────────────
+app.use((req, _res, next) => {
+  req.id = req.headers["x-request-id"] || crypto.randomUUID();
+  next();
+});
+
+// ── CORS ─────────────────────────────────────────────────────
 app.use(cors({
-  origin: function(origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, Postman)
-    if (!origin) return callback(null, true);
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true);
     const allowed = [
       process.env.FRONTEND_URL,
-      'https://shark-app-tt8ea.ondigitalocean.app',
-      'http://localhost:3000',
-      'http://localhost:3001',
+      "https://shark-app-tt8ea.ondigitalocean.app",
+      "http://localhost:3000",
+      "http://localhost:3001",
     ].filter(Boolean);
-    if (allowed.some(u => origin.startsWith(u))) return callback(null, true);
-    callback(new Error('CORS: origin not allowed: ' + origin));
+    if (allowed.some(u => origin.startsWith(u))) return cb(null, true);
+    cb(new Error(`CORS: origin not allowed: ${origin}`));
   },
   credentials: true,
 }));
-app.use(express.json());
 
-app.use("/auth", authRoutes); 
-app.use("/admin", adminRoutes);
-app.use("/profile", profileRoutes);
-app.use("/sales-requests", salesRequestRoutes);
-app.use("/modules", require("./routes/module.routes"));
-app.use("/roles", require("./routes/role.routes"));
-app.use("/role-modules", roleModuleRoutes);
-app.use("/erp", require("./routes/erp.routes"));
-app.use("/api/chat", chatRoutes);
-app.use("/cart", cartRoutes);
-app.use("/", signupRoutes);
-app.use("/", documentsRoutes);
-app.use("/orders", salesOrderRoutes);
+app.use(express.json({ limit: "10mb" }));
 
-app.use("/sinvoice", salesInvoiceRoutes);
-app.use("/squote", salesQuoteRoutes);
-app.use("/deliveries", salesDeliveries);
-app.use("/payment", PaymentRoutes);
+// ── Request logger (dev only) ────────────────────────────────
+if (process.env.NODE_ENV !== "production") {
+  app.use((req, _res, next) => {
+    logger.debug(`${req.method} ${req.path}`, { reqId: req.id });
+    next();
+  });
+}
 
-app.use("/content", contentRoutes);
+// ── Health check ─────────────────────────────────────────────
+app.get("/health", (_req, res) => res.json({ status: "ok", ts: new Date().toISOString() }));
 
-app.use("/dashboard", dashboardRoutes);
-app.use("/inventory",       inventoryRoutes);
-app.use("/erp/inventory",   inventoryRoutes);  // alias — frontend uses /erp/inventory
-app.use("/maintenance",  maintenanceRoutes);
-app.use("/credit-notes", require("./routes/creditNotes.routes"));
-app.use("/superadmin",  superadminRoutes);
-app.use("/partners",    partnerRoutes);        // 3-tier: partner/reseller management
+// ── Routes ───────────────────────────────────────────────────
+// Auth & signup
+app.use("/auth",           require("./routes/auth.routes"));
+app.use("/auth",           require("./routes/signup.routes"));   // POST /auth/signup
 
-// Auto-migration: add erp_delivery_no column if not exists
-const db = require('./config/db');
-db.query(`ALTER TABLE sales_requests ADD COLUMN IF NOT EXISTS erp_delivery_no VARCHAR(100)`).catch(e => console.warn('Migration:', e.message));
-db.query(`ALTER TABLE sales_requests ADD COLUMN IF NOT EXISTS customer_notes TEXT`).catch(e => console.warn('Migration:', e.message));
+// Platform management (3-tier)
+app.use("/partners",       require("./routes/partner.routes"));
+app.use("/superadmin",     require("./routes/superadmin.routes"));
+
+// Tenant admin
+app.use("/admin",          require("./routes/admin.routes"));
+app.use("/modules",        require("./routes/module.routes"));
+app.use("/roles",          require("./routes/role.routes"));
+app.use("/role-modules",   require("./routes/roleModule.routes"));
+app.use("/content",        require("./routes/content.routes"));
+app.use("/maintenance",    require("./routes/maintenance.routes"));
+
+// Documents — mounted at root so /admin/legal-documents works
+app.use("/",               require("./routes/documents.routes"));
+
+// Dashboard
+app.use("/dashboard",      require("./routes/dashboard.routes"));
+
+// ERP data
+app.use("/erp",            require("./routes/erp.routes"));
+app.use("/inventory",      require("./routes/inventory.routes"));
+
+// Sales — keep BOTH old and new paths for backward compat
+app.use("/orders",         require("./routes/salesOrder.routes"));
+app.use("/invoices",       require("./routes/salesInvoice.routes"));
+app.use("/sinvoice",       require("./routes/salesInvoice.routes"));   // legacy alias
+app.use("/quotes",         require("./routes/salesQuote.routes"));
+app.use("/squote",         require("./routes/salesQuote.routes"));     // legacy alias
+app.use("/deliveries",     require("./routes/salesDeliveries.routes"));
+app.use("/payments",       require("./routes/payment.routes"));
+app.use("/payment",        require("./routes/payment.routes"));        // legacy alias
+app.use("/credit-notes",   require("./routes/creditNotes.routes"));
+app.use("/sales-requests", require("./routes/salesRequest.routes"));
+
+// Other
+app.use("/cart",           require("./routes/cart.routes"));
+app.use("/profile",        require("./routes/profile.routes"));
+app.use("/api/chat",       require("./routes/chat.routes"));           // keep /api/chat prefix
+app.use("/chat",           require("./routes/chat.routes"));           // also serve without prefix
+
+// ── 404 + Global error handler (must be last) ─────────────────
+app.use(notFoundHandler);
+app.use(globalErrorHandler);
 
 module.exports = app;
