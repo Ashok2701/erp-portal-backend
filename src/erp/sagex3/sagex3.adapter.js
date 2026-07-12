@@ -1637,9 +1637,7 @@ class SageX3Adapter extends BaseERPAdapter {
 
     return result.recordset;
   }
-}
 
-module.exports = SageX3Adapter;
   // ── PURCHASE ORDERS (Supplier Portal) ────────────────────────
   async getAllPurchaseOrders(supplierCode, filters = {}) {
     const pool = await this.poolPromise;
@@ -1771,3 +1769,6 @@ module.exports = SageX3Adapter;
 
     return result.recordset;
   }
+}
+
+module.exports = SageX3Adapter;
