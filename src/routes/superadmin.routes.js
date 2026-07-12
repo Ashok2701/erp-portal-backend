@@ -23,4 +23,9 @@ router.put  ("/tenants/:id/users/:userId",   ctrl.toggleTenantUser);
 router.put  ("/tenants/users/:userId",        ctrl.toggleTenantUser);
 router.post ("/users/:userId/reset-password", ctrl.resetTenantUserPassword);
 
+router.get  ("/tenants/:id/portal-grants",       ctrl.getPortalGrants);
+router.get  ("/users/:userId/erp-mappings",      ctrl.getUserErpMappings);
+router.post ("/users/:userId/erp-mappings",      ctrl.setUserErpMapping);
+router.post ("/tenants/:id/portal-grants",   ctrl.setPortalGrants);
+
 module.exports = router;

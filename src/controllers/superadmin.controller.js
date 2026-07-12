@@ -408,3 +408,104 @@ exports.toggleTenantUser = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// ── PORTAL GRANTS ─────────────────────────────────────────────
+const PortalGrantModel = require("../models/portalGrant.model");
+
+exports.getPortalGrants = async (req, res) => {
+  try {
+    const { id: tenantId } = req.params;
+    if (req.user.system_role === "partner_user") {
+      const ok = await verifyPartnerAccess(req, tenantId);
+      if (!ok) return res.status(403).json({ success: false, message: "Access denied" });
+    }
+    const grants = await PortalGrantModel.getByTenantId(tenantId);
+    res.json({ success: true, data: grants });
+  } catch (err) {
+    console.error("GET PORTAL GRANTS ERROR:", err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.setPortalGrants = async (req, res) => {
+  try {
+    const { id: tenantId } = req.params;
+    const { portal_types } = req.body; // e.g. ['CUSTOMER','CONSIGNMENT']
+
+    if (!Array.isArray(portal_types) || !portal_types.length)
+      return res.status(400).json({ success: false, message: "portal_types array required" });
+
+    const validTypes = ["CUSTOMER", "CONSIGNMENT", "SUPPLIER"];
+    const invalid = portal_types.filter(p => !validTypes.includes(p));
+    if (invalid.length)
+      return res.status(400).json({ success: false, message: `Invalid portal types: ${invalid.join(", ")}` });
+
+    if (req.user.system_role === "partner_user") {
+      const ok = await verifyPartnerAccess(req, tenantId);
+      if (!ok) return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    // First deactivate all existing grants for this tenant
+    await db.query(
+      "UPDATE tenant_portal_grants SET is_active = false WHERE tenant_id = $1",
+      [tenantId]
+    );
+
+    // Grant new portals
+    await PortalGrantModel.grantPortals(tenantId, portal_types, req.user.user_id);
+
+    const grants = await PortalGrantModel.getByTenantId(tenantId);
+    res.json({ success: true, data: grants });
+  } catch (err) {
+    console.error("SET PORTAL GRANTS ERROR:", err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── USER ERP MAPPING PER PORTAL ───────────────────────────────
+exports.getUserErpMappings = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const r = await db.query(
+      `SELECT * FROM user_role_erp_mapping WHERE user_id = $1 ORDER BY portal_type`,
+      [userId]
+    );
+    res.json({ success: true, data: r.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.setUserErpMapping = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { portal_type, erp_entity_type, erp_entity_code, allowedsite, is_default } = req.body;
+
+    if (!portal_type) return res.status(400).json({ success: false, message: "portal_type required" });
+
+    // If setting as default, clear existing default
+    if (is_default) {
+      await db.query(
+        "UPDATE user_role_erp_mapping SET is_default = false WHERE user_id = $1",
+        [userId]
+      );
+    }
+
+    await db.query(
+      `INSERT INTO user_role_erp_mapping
+         (user_id, portal_type, erp_entity_type, erp_entity_code, allowedsite, is_default)
+       VALUES ($1,$2,$3,$4,$5,$6)
+       ON CONFLICT (user_id, portal_type)
+       DO UPDATE SET erp_entity_type=$3, erp_entity_code=$4, allowedsite=$5, is_default=$6`,
+      [userId, portal_type, erp_entity_type, erp_entity_code, allowedsite, is_default || false]
+    );
+
+    const r = await db.query(
+      "SELECT * FROM user_role_erp_mapping WHERE user_id=$1 ORDER BY portal_type",
+      [userId]
+    );
+    res.json({ success: true, data: r.rows });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

@@ -1,19 +1,14 @@
+"use strict";
 const jwt    = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const db     = require("../config/db");
 
-const UserModel   = require("../models/user.model");
-const RoleModel   = require("../models/role.model");
-const ModuleModel = require("../models/module.model");
+const UserModel        = require("../models/user.model");
+const RoleModel        = require("../models/role.model");
+const ModuleModel      = require("../models/module.model");
+const PortalGrantModel = require("../models/portalGrant.model");
 
-function resolveErpContext(user) {
-  return {
-    erp_customer_code: user.erp_entity_type === "customer" ? user.erp_entity_code : null,
-    erp_supplier_code: user.erp_entity_type === "supplier" ? user.erp_entity_code : null,
-  };
-}
-
-// Build partner payload from user row (null-safe)
+// ── Helpers ───────────────────────────────────────────────────
 function resolvePartnerContext(user) {
   if (!user.partner_id) return {};
   return {
@@ -29,21 +24,42 @@ function resolvePartnerContext(user) {
   };
 }
 
+/**
+ * Resolve which portal type is active on login.
+ * Priority: default_role field → first available portal → CUSTOMER fallback
+ */
+function resolveDefaultPortal(portals, defaultRole) {
+  if (!portals.length) return "CUSTOMER";
+
+  // Map default_role field to portal type
+  const roleToPortal = {
+    "Customer":     "CUSTOMER",
+    "B2B Customer": "CONSIGNMENT",
+    "Supplier":     "SUPPLIER",
+    "Administrator":"CUSTOMER",  // admins default to customer view
+  };
+
+  if (defaultRole && roleToPortal[defaultRole]) {
+    const preferred = roleToPortal[defaultRole];
+    if (portals.find(p => p.portal_type === preferred)) return preferred;
+  }
+
+  // Fall back to first available
+  return portals[0].portal_type;
+}
+
 // ── LOGIN ────────────────────────────────────────────────────
 exports.login = async (req, res) => {
   const { username, password } = req.body;
 
   const user = await UserModel.findByUsername(username);
-
   if (!user)
     return res.status(401).json({ message: "User doesn't exist" });
 
   if (!user.is_active && user.status !== "IN_VERIFICATION" && user.status !== "PENDING_APPROVAL")
     return res.status(401).json({ message: "User is inactive" });
-
   if (user.status === "PENDING_REVIEW")
     return res.status(401).json({ message: "Your account is pending review. Please wait for admin approval." });
-
   if (user.status === "REJECTED")
     return res.status(401).json({ message: "Your account has been rejected. Please contact support." });
 
@@ -51,20 +67,25 @@ exports.login = async (req, res) => {
   if (!isValid)
     return res.status(401).json({ message: "Invalid credentials" });
 
-  const roles      = await RoleModel.getRolesByUserId(user.user_id);
-  const roleName   = roles.length > 0 ? roles[0].role_name : (user.requested_role || "Customer");
-  const expiresIn  = process.env.JWT_EXPIRES_IN || "8h";
+  const roles     = await RoleModel.getRolesByUserId(user.user_id);
+  const roleName  = roles.length > 0 ? roles[0].role_name : (user.requested_role || "Customer");
+  const expiresIn = process.env.JWT_EXPIRES_IN || "8h";
 
-  // Resolve system_role — backward compat with is_super_admin
-  const system_role = user.system_role ||
-    (user.is_super_admin ? "owner" : "tenant_user");
+  const system_role = user.system_role || (user.is_super_admin ? "owner" : "tenant_user");
 
-  // Role display: owner always shows as "Owner", partner as "Partner"
-  const displayRole = system_role === "owner"        ? "Owner"
-                    : system_role === "partner_user"  ? "Partner"
+  const displayRole = system_role === "owner"       ? "Owner"
+                    : system_role === "partner_user" ? "Partner"
                     : roleName || "Customer";
 
-  const erpContext     = resolveErpContext(user);
+  // ── Portal access (tenant users only) ────────────────────
+  let portals      = [];
+  let activePortal = null;
+
+  if (system_role === "tenant_user" && user.tenant_id) {
+    portals      = await PortalGrantModel.getUserPortalAccess(user.user_id, user.tenant_id);
+    activePortal = resolveDefaultPortal(portals, user.default_role);
+  }
+
   const partnerContext = resolvePartnerContext(user);
 
   const token = jwt.sign(
@@ -73,20 +94,32 @@ exports.login = async (req, res) => {
     { expiresIn }
   );
 
+  // Active portal ERP context
+  const activePortalData = portals.find(p => p.portal_type === activePortal) || {};
+
   res.json({
     token,
     user: {
-      user_id:        user.user_id,
-      tenant_id:      user.tenant_id,
-      username:       user.username,
-      role:           displayRole,
-      status:         user.status || "ACTIVE",
-      allowedsite:    user.allowedsite,
-      portal_mode:    user.portal_mode || "b2c",
-      is_super_admin: user.is_super_admin || false,
+      user_id:           user.user_id,
+      tenant_id:         user.tenant_id,
+      username:          user.username,
+      full_name:         user.full_name,
+      email:             user.email,
+      role:              displayRole,
+      status:            user.status || "ACTIVE",
+      portal_mode:       user.portal_mode || "b2c",
+      is_super_admin:    user.is_super_admin || false,
       system_role,
-      erp_customer_code: erpContext.erp_customer_code,
-      erp_supplier_code: erpContext.erp_supplier_code,
+      default_role:      user.default_role,
+      // Portal switching
+      portals,                              // all portals this user can access
+      active_portal:     activePortal,      // which portal loads first
+      // ERP context for active portal
+      erp_entity_type:   activePortalData.erp_entity_type || user.erp_entity_type,
+      erp_entity_code:   activePortalData.erp_entity_code || user.erp_entity_code,
+      erp_customer_code: activePortalData.erp_entity_type === "customer" ? activePortalData.erp_entity_code : null,
+      erp_supplier_code: activePortalData.erp_entity_type === "supplier" ? activePortalData.erp_entity_code : null,
+      allowedsite:       activePortalData.allowedsite || user.allowedsite,
       ...partnerContext,
       roles,
     },
@@ -97,19 +130,19 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const { user_id, tenant_id, username, role, status,
-            portal_mode, is_super_admin, tenant_slug, system_role } = req.user;
+            portal_mode, is_super_admin, system_role } = req.user;
 
     const roles = await RoleModel.getRolesByUserId(user_id);
 
-    // Get full user details + partner context in one query
     const userResult = await db.query(
       `SELECT u.allowedsite, u.erp_entity_type, u.erp_entity_code,
-              u.full_name, u.email, u.system_role,
+              u.full_name, u.email, u.system_role, u.default_role,
+              u.tenant_slug,
               pu.partner_id,
-              p.partner_name,  p.slug  AS partner_slug,
-              p.plan           AS partner_plan,
-              p.app_name       AS partner_app_name,
-              p.primary_color  AS partner_primary_color,
+              p.partner_name, p.slug  AS partner_slug,
+              p.plan         AS partner_plan,
+              p.app_name     AS partner_app_name,
+              p.primary_color AS partner_primary_color,
               p.default_currency AS partner_currency,
               p.default_language AS partner_language,
               p.default_unit     AS partner_unit
@@ -124,27 +157,43 @@ exports.getMe = async (req, res) => {
     const resolved_system_role = extra.system_role ||
       (is_super_admin ? "owner" : "tenant_user");
 
-    const partnerContext = resolvePartnerContext(extra);
-
-    // Display role based on system_role
     const displayRole = resolved_system_role === "owner"       ? "Owner"
                       : resolved_system_role === "partner_user" ? "Partner"
                       : role || "Customer";
 
+    // Portal access
+    let portals      = [];
+    let activePortal = null;
+    if (resolved_system_role === "tenant_user" && tenant_id) {
+      portals      = await PortalGrantModel.getUserPortalAccess(user_id, tenant_id);
+      activePortal = resolveDefaultPortal(portals, extra.default_role);
+    }
+
+    const activePortalData = portals.find(p => p.portal_type === activePortal) || {};
+    const partnerContext   = resolvePartnerContext(extra);
+
     res.json({
       user_id,
       tenant_id,
-      tenant_slug,
+      tenant_slug:       extra.tenant_slug,
       username,
-      role: displayRole,
-      status,
-      portal_mode:       portal_mode    || "b2c",
-      is_super_admin:    is_super_admin || false,
-      system_role:       resolved_system_role,
-      allowedsite:       extra.allowedsite,
-      erp_customer_code: extra.erp_entity_code,
       full_name:         extra.full_name,
       email:             extra.email,
+      role:              displayRole,
+      status,
+      portal_mode:       portal_mode || "b2c",
+      is_super_admin:    is_super_admin || false,
+      system_role:       resolved_system_role,
+      default_role:      extra.default_role,
+      // Portal switching
+      portals,
+      active_portal:     activePortal,
+      // ERP context
+      erp_entity_type:   activePortalData.erp_entity_type || extra.erp_entity_type,
+      erp_entity_code:   activePortalData.erp_entity_code || extra.erp_entity_code,
+      erp_customer_code: activePortalData.erp_entity_type === "customer" ? activePortalData.erp_entity_code : null,
+      erp_supplier_code: activePortalData.erp_entity_type === "supplier" ? activePortalData.erp_entity_code : null,
+      allowedsite:       activePortalData.allowedsite || extra.allowedsite,
       ...partnerContext,
       roles,
     });
@@ -154,10 +203,25 @@ exports.getMe = async (req, res) => {
   }
 };
 
-// ── GET MODULES ──────────────────────────────────────────────
+// ── GET MODULES (portal-aware) ───────────────────────────────
 exports.getModules = async (req, res) => {
   try {
-    const { user_id } = req.user;
+    const { user_id, tenant_id, system_role } = req.user;
+
+    // Owner + partner → no portal filtering
+    if (system_role === "owner" || system_role === "partner_user") {
+      const modules = await ModuleModel.getModulesByUserId(user_id);
+      return res.json({ modules });
+    }
+
+    // For tenant users: check if portal type passed as query param
+    const portalType = req.query.portal;
+    if (portalType && tenant_id) {
+      const modules = await PortalGrantModel.getModulesForPortal(portalType, tenant_id);
+      return res.json({ modules });
+    }
+
+    // Default: return all modules user has access to
     const modules = await ModuleModel.getModulesByUserId(user_id);
     res.json({ modules });
   } catch (err) {
