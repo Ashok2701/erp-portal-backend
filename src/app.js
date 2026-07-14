@@ -107,6 +107,38 @@ app.get("/health", (_req, res) => res.json({ status: "ok", ts: new Date().toISOS
         created_at    TIMESTAMPTZ  DEFAULT NOW()
       );
     `);
+    // Purchase request tables
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS purchase_requests (
+        purchase_request_id  VARCHAR(20)   PRIMARY KEY,
+        tenant_id            UUID          NOT NULL,
+        user_id              UUID,
+        supplier_code        VARCHAR(50),
+        site                 VARCHAR(20),
+        currency             VARCHAR(10)   DEFAULT 'USD',
+        reference            VARCHAR(100),
+        comment              TEXT,
+        total_amount         NUMERIC(18,4) DEFAULT 0,
+        total_qty            NUMERIC(18,4) DEFAULT 0,
+        status               VARCHAR(30)   DEFAULT 'PENDING'
+                             CHECK (status IN ('PENDING','APPROVED','REJECTED','CONVERTED')),
+        erp_po_number        VARCHAR(50),
+        request_date         DATE          DEFAULT CURRENT_DATE,
+        created_at           TIMESTAMPTZ   DEFAULT NOW()
+      );
+      CREATE TABLE IF NOT EXISTS purchase_request_items (
+        id                   UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+        purchase_request_id  VARCHAR(20)   NOT NULL REFERENCES purchase_requests(purchase_request_id),
+        line_no              INTEGER,
+        product_code         VARCHAR(50)   NOT NULL,
+        prod_desc            TEXT,
+        quantity             NUMERIC(18,4) NOT NULL,
+        unit                 VARCHAR(20),
+        price                NUMERIC(18,4) DEFAULT 0,
+        line_amount          NUMERIC(18,4) DEFAULT 0
+      );
+      CREATE SEQUENCE IF NOT EXISTS purchase_request_seq START 1;
+    `);
     logger.info("Supplier/consignment tables ready");
   } catch (err) {
     logger.error("Table creation error:", { message: err.message });
@@ -153,7 +185,8 @@ app.use("/credit-notes",   require("./routes/creditNotes.routes"));
 app.use("/sales-requests", require("./routes/salesRequest.routes"));
 
 // Other
-app.use("/supplier",       require("./routes/supplier.routes"));
+app.use("/purchase-requests", require("./routes/purchaseRequest.routes"));
+app.use("/supplier",          require("./routes/supplier.routes"));
 app.use("/cart",           require("./routes/cart.routes"));
 app.use("/profile",        require("./routes/profile.routes"));
 app.use("/api/chat",       require("./routes/chat.routes"));           // keep /api/chat prefix
