@@ -404,17 +404,24 @@ exports.createTenantUser = async (req, res) => {
 
       // Save ERP mapping for this portal
       if (mapping.erp_entity_code) {
+        // is_default: use value from frontend, or true if this is the default portal
+        const isDefaultMapping = mapping.is_default === true || mapping.portal_type === (
+          default_role
+            ? Object.keys(portalToRole).find(k => portalToRole[k] === default_role) || 'CUSTOMER'
+            : 'CUSTOMER'
+        );
         await db.query(
           `INSERT INTO user_role_erp_mapping
              (user_id, portal_type, erp_entity_type, erp_entity_code, allowedsite, is_default)
            VALUES ($1,$2,$3,$4,$5,$6)
            ON CONFLICT (user_id, portal_type)
            DO UPDATE SET erp_entity_type=$3, erp_entity_code=$4, allowedsite=$5, is_default=$6`,
-          [user.user_id, mapping.portal_type,
+          [user.user_id,
+           mapping.portal_type,
            mapping.erp_entity_type || 'customer',
            mapping.erp_entity_code,
            mapping.allowedsite || '',
-           mapping.portal_type === (default_role ? portalToRole[Object.keys(portalToRole).find(k => portalToRole[k] === default_role)] : 'CUSTOMER')]
+           isDefaultMapping]   // explicit boolean variable — no type confusion
         );
       }
     }
