@@ -101,21 +101,39 @@ exports.getUserPortalAccess = async (userId, tenantId) => {
     erpByPortal[row.portal_type] = row;
   }
 
-  // Get user's roles
+  // Get user's roles - scoped to tenant to avoid cross-tenant role pollution
   const rolesResult = await db.query(
     `SELECT r.role_name FROM user_roles ur
      JOIN roles r ON r.role_id = ur.role_id
-     WHERE ur.user_id = $1`,
-    [userId]
+     WHERE ur.user_id = $1
+       AND (r.tenant_id = $2 OR r.tenant_id IS NULL)`,
+    [userId, tenantId]
   );
   const userRoleNames = rolesResult.rows.map(r => r.role_name);
+  
+  // If no roles found via user_roles, check default_role on user record
+  if (!userRoleNames.length) {
+    const userRecord = await db.query(
+      'SELECT default_role FROM users WHERE user_id = $1', [userId]
+    );
+    if (userRecord.rows[0]?.default_role) {
+      userRoleNames.push(userRecord.rows[0].default_role);
+    }
+  }
 
   // Build portal access list
+  console.log('[portalGrant] userId:', userId, 'tenantId:', tenantId);
+  console.log('[portalGrant] grantedPortals:', grantedPortals);
+  console.log('[portalGrant] userRoleNames:', userRoleNames);
+  console.log('[portalGrant] erpByPortal:', Object.keys(erpByPortal));
+
   return grantedPortals
     .filter(pt => {
       // User must have at least one role valid for this portal
       const validRoles = PORTAL_ROLES[pt] || [];
-      return validRoles.some(r => userRoleNames.includes(r));
+      const hasRole = validRoles.some(r => userRoleNames.includes(r));
+      console.log('[portalGrant] portal:', pt, 'validRoles:', validRoles, 'hasRole:', hasRole);
+      return hasRole;
     })
     .map(pt => ({
       portal_type:     pt,
