@@ -415,13 +415,17 @@ exports.createTenantUser = async (req, res) => {
              (user_id, portal_type, erp_entity_type, erp_entity_code, allowedsite, is_default)
            VALUES ($1,$2,$3,$4,$5,$6)
            ON CONFLICT (user_id, portal_type)
-           DO UPDATE SET erp_entity_type=$3, erp_entity_code=$4, allowedsite=$5, is_default=$6`,
+           DO UPDATE SET
+             erp_entity_type = EXCLUDED.erp_entity_type,
+             erp_entity_code = EXCLUDED.erp_entity_code,
+             allowedsite     = EXCLUDED.allowedsite,
+             is_default      = EXCLUDED.is_default`,
           [user.user_id,
            mapping.portal_type,
            mapping.erp_entity_type || 'customer',
            mapping.erp_entity_code,
            mapping.allowedsite || '',
-           isDefaultMapping]   // explicit boolean variable — no type confusion
+           isDefaultMapping]
         );
       }
     }
@@ -700,8 +704,12 @@ exports.setUserErpMapping = async (req, res) => {
          (user_id, portal_type, erp_entity_type, erp_entity_code, allowedsite, is_default)
        VALUES ($1,$2,$3,$4,$5,$6)
        ON CONFLICT (user_id, portal_type)
-       DO UPDATE SET erp_entity_type=$3, erp_entity_code=$4, allowedsite=$5, is_default=$6`,
-      [userId, portal_type, erp_entity_type, erp_entity_code, allowedsite, is_default || false]
+       DO UPDATE SET
+         erp_entity_type = EXCLUDED.erp_entity_type,
+         erp_entity_code = EXCLUDED.erp_entity_code,
+         allowedsite     = EXCLUDED.allowedsite,
+         is_default      = EXCLUDED.is_default`,
+      [userId, portal_type, erp_entity_type, erp_entity_code, allowedsite, !!is_default]
     );
 
     const r = await db.query(
