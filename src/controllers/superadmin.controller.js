@@ -208,12 +208,21 @@ exports.getTenantUsers = async (req, res) => {
     }
     const result = await db.query(
       `SELECT u.user_id, u.username, u.full_name, u.email,
-              u.status, u.is_active, u.portal_mode,
-              u.is_super_admin, u.created_at, r.role_name
+              u.status, u.is_active, u.portal_mode, u.default_role,
+              u.is_super_admin, u.created_at,
+              -- Aggregate all tenant-scoped roles into a comma-separated string
+              STRING_AGG(r.role_name, ', ' ORDER BY r.role_name) AS role_name,
+              -- Also return the default/primary role for display
+              u.default_role AS primary_role
        FROM users u
-       LEFT JOIN user_roles ur ON u.user_id=ur.user_id
-       LEFT JOIN roles r ON ur.role_id=r.role_id
-       WHERE u.tenant_id=$1 ORDER BY u.created_at DESC`,
+       LEFT JOIN user_roles ur ON u.user_id = ur.user_id
+       LEFT JOIN roles r ON ur.role_id = r.role_id
+                        AND (r.tenant_id = $1 OR r.tenant_id IS NULL)
+       WHERE u.tenant_id = $1
+       GROUP BY u.user_id, u.username, u.full_name, u.email,
+                u.status, u.is_active, u.portal_mode, u.default_role,
+                u.is_super_admin, u.created_at
+       ORDER BY u.created_at DESC`,
       [id]
     );
     res.json({ success: true, data: result.rows });
