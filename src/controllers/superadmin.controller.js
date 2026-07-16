@@ -191,7 +191,16 @@ exports.upsertSettings = async (req, res) => {
     ERPFactory.clearAdapterCache(id);
     emailService.clearTransporterCache(id);
 
-    res.json({ success: true, data });
+    // Mask secrets before echoing back — getTenant() already does this, this
+    // endpoint didn't, so a save request's own response leaked the plaintext
+    // password right back into the browser (and any request logging/tools
+    // that capture response bodies).
+    const masked = { ...data };
+    if (masked.erp_db_password) masked.erp_db_password = "••••••••";
+    if (masked.x3_password)     masked.x3_password     = "••••••••";
+    if (masked.smtp_password)   masked.smtp_password   = "••••••••";
+
+    res.json({ success: true, data: masked });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
