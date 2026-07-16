@@ -154,10 +154,26 @@ const schemas = {
     full_name:       f.str().optional().allow("", null),
     password:        f.password.required(),
     role_name:       f.str(50).optional(),
+    default_role:    f.str(50).optional().allow("", null),
     portal_mode:     Joi.string().valid("b2b", "b2c", "both").optional(),
     erp_entity_type: Joi.string().valid("customer", "supplier", "none").optional(),
     erp_entity_code: f.str(50).optional().allow("", null),
     allowedsite:     f.str(500).optional().allow("", null),
+    // NOTE: this array was missing from the schema entirely. With
+    // stripUnknown:true on the validate() middleware, every erp_mappings
+    // payload sent by the multi-portal "Add User Wizard" was being silently
+    // deleted before it ever reached the controller — so no additional
+    // portal roles and no user_role_erp_mapping rows were ever saved for
+    // ANY user created through this endpoint.
+    erp_mappings: Joi.array().items(
+      Joi.object({
+        portal_type:     Joi.string().valid("CUSTOMER", "CONSIGNMENT", "SUPPLIER").required(),
+        erp_entity_type: Joi.string().valid("customer", "supplier").optional(),
+        erp_entity_code: f.str(50).optional().allow("", null),
+        allowedsite:     f.str(500).optional().allow("", null),
+        is_default:      f.bool.optional(),
+      })
+    ).optional(),
   }),
 
   resetPassword: Joi.object({
