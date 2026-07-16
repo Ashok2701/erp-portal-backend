@@ -326,11 +326,17 @@ exports.createTenantUser = async (req, res) => {
 
     // If no tenant-specific role found, auto-create default roles for this tenant
     if (!roleRes.rows.length) {
+      // NOTE: roles.role_code has a GLOBAL unique constraint (not scoped per-tenant).
+      // Codes must be suffixed with the tenant id so they never collide with another
+      // tenant's default roles (a collision silently no-ops the insert via
+      // ON CONFLICT DO NOTHING, leaving this tenant with zero role rows and every
+      // user it creates role-less).
+      const tenantSuffix = tenantId.replace(/-/g, '').slice(0, 8).toUpperCase();
       const defaultRoles = [
-        { code: 'ADMINISTRATOR', name: 'Administrator' },
-        { code: 'CUSTOMER',      name: 'Customer'      },
-        { code: 'B2B_CUSTOMER',  name: 'B2B Customer'  },
-        { code: 'SUPPLIER',      name: 'Supplier'      },
+        { code: `ADMINISTRATOR_${tenantSuffix}`, name: 'Administrator' },
+        { code: `CUSTOMER_${tenantSuffix}`,      name: 'Customer'      },
+        { code: `B2B_CUSTOMER_${tenantSuffix}`,  name: 'B2B Customer'  },
+        { code: `SUPPLIER_${tenantSuffix}`,      name: 'Supplier'      },
       ];
       for (const r of defaultRoles) {
         await db.query(
@@ -442,6 +448,109 @@ exports.createTenantUser = async (req, res) => {
     if (err.code === '23505')
       return res.status(400).json({ success: false, message: 'Username or email already exists' });
     console.error('CREATE TENANT USER ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+// ── REPAIR TENANT ROLES (fixes tenants broken by the role_code collision bug) ──
+// Ensures this tenant has its own tenant-scoped default roles, then backfills
+// user_roles for any tenant user that has zero role rows (which happened for
+// every tenant after the first, because default role auto-creation used
+// globally-fixed role_code values that silently no-op'd on conflict).
+exports.repairTenantRoles = async (req, res) => {
+  try {
+    const { id: tenantId } = req.params;
+
+    if (req.user.system_role === 'partner_user') {
+      const allowed = await verifyPartnerAccess(req, tenantId);
+      if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    // 1. Ensure tenant-scoped default roles exist (tenant-unique role_code)
+    const tenantSuffix = tenantId.replace(/-/g, '').slice(0, 8).toUpperCase();
+    const defaultRoles = [
+      { code: `ADMINISTRATOR_${tenantSuffix}`, name: 'Administrator' },
+      { code: `CUSTOMER_${tenantSuffix}`,      name: 'Customer'      },
+      { code: `B2B_CUSTOMER_${tenantSuffix}`,  name: 'B2B Customer'  },
+      { code: `SUPPLIER_${tenantSuffix}`,      name: 'Supplier'      },
+    ];
+    for (const r of defaultRoles) {
+      const exists = await db.query(
+        `SELECT 1 FROM roles WHERE tenant_id=$1 AND role_name=$2 LIMIT 1`,
+        [tenantId, r.name]
+      );
+      if (!exists.rows.length) {
+        await db.query(
+          `INSERT INTO roles (role_id, role_code, role_name, is_active, tenant_id, description)
+           VALUES (gen_random_uuid(),$1,$2,true,$3,$4)
+           ON CONFLICT DO NOTHING`,
+          [r.code, r.name, tenantId, r.name + ' role for tenant']
+        );
+      }
+    }
+
+    const roleRows = await db.query(
+      `SELECT role_id, role_name FROM roles WHERE tenant_id=$1`,
+      [tenantId]
+    );
+    const roleIdByName = {};
+    for (const row of roleRows.rows) roleIdByName[row.role_name] = row.role_id;
+
+    // 2. Find users in this tenant with zero rows in user_roles
+    const usersRes = await db.query(
+      `SELECT u.user_id, u.default_role
+       FROM users u
+       WHERE u.tenant_id = $1
+         AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = u.user_id)`,
+      [tenantId]
+    );
+
+    const portalToRole = {
+      'CUSTOMER':    'Customer',
+      'CONSIGNMENT': 'B2B Customer',
+      'SUPPLIER':    'Supplier',
+    };
+
+    const fixed = [];
+    for (const u of usersRes.rows) {
+      const rolesToAssign = new Set();
+
+      // Primary role from default_role column
+      if (u.default_role && roleIdByName[u.default_role]) {
+        rolesToAssign.add(u.default_role);
+      }
+
+      // Additional roles implied by their ERP portal mappings
+      const mappings = await db.query(
+        `SELECT DISTINCT portal_type FROM user_role_erp_mapping WHERE user_id=$1`,
+        [u.user_id]
+      );
+      for (const m of mappings.rows) {
+        const roleName = portalToRole[m.portal_type];
+        if (roleName && roleIdByName[roleName]) rolesToAssign.add(roleName);
+      }
+
+      // Fallback: at least give them Customer so they're not completely locked out
+      if (!rolesToAssign.size && roleIdByName['Customer']) rolesToAssign.add('Customer');
+
+      for (const roleName of rolesToAssign) {
+        await db.query(
+          `INSERT INTO user_roles (user_role_id, user_id, role_id)
+           VALUES (gen_random_uuid(),$1,$2) ON CONFLICT DO NOTHING`,
+          [u.user_id, roleIdByName[roleName]]
+        );
+      }
+
+      if (rolesToAssign.size) fixed.push({ user_id: u.user_id, roles: [...rolesToAssign] });
+    }
+
+    res.json({
+      success: true,
+      message: `Repaired ${fixed.length} user(s) for this tenant.`,
+      data: { roles_ensured: Object.keys(roleIdByName), users_fixed: fixed },
+    });
+  } catch (err) {
+    console.error('REPAIR TENANT ROLES ERROR:', err.message);
     res.status(500).json({ success: false, message: err.message });
   }
 };

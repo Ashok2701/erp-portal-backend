@@ -219,11 +219,16 @@ exports.createTenantUnderPartner = async (req, res) => {
     );
 
     // Auto-create default roles for this tenant
+    // NOTE: roles.role_code has a GLOBAL unique constraint (not scoped per-tenant),
+    // so codes must be suffixed with the tenant id to avoid silently colliding with
+    // another tenant's default roles (ON CONFLICT DO NOTHING would then no-op here,
+    // leaving this tenant with zero role rows).
+    const tenantSuffix = tenant.tenant_id.replace(/-/g, '').slice(0, 8).toUpperCase();
     const defaultRoles = [
-      { code: 'ADMINISTRATOR', name: 'Administrator' },
-      { code: 'CUSTOMER',      name: 'Customer'      },
-      { code: 'B2B_CUSTOMER',  name: 'B2B Customer'  },
-      { code: 'SUPPLIER',      name: 'Supplier'      },
+      { code: `ADMINISTRATOR_${tenantSuffix}`, name: 'Administrator' },
+      { code: `CUSTOMER_${tenantSuffix}`,      name: 'Customer'      },
+      { code: `B2B_CUSTOMER_${tenantSuffix}`,  name: 'B2B Customer'  },
+      { code: `SUPPLIER_${tenantSuffix}`,      name: 'Supplier'      },
     ];
     for (const r of defaultRoles) {
       await db.query(
@@ -653,18 +658,22 @@ exports.createTenantAdminUser = async (req, res) => {
 
     if (!roleResult.rows.length) {
       // Auto-create 4 default roles for this tenant
+      // NOTE: roles.role_code has a GLOBAL unique constraint (not scoped per-tenant),
+      // so codes must be suffixed with the tenant id to avoid silently colliding with
+      // another tenant's default roles.
+      const tenantSuffix = tenantId.replace(/-/g, '').slice(0, 8).toUpperCase();
       const defaultRoles = [
-        { code: 'ADMINISTRATOR', name: 'Administrator' },
-        { code: 'CUSTOMER',      name: 'Customer'      },
-        { code: 'B2B_CUSTOMER',  name: 'B2B Customer'  },
-        { code: 'SUPPLIER',      name: 'Supplier'      },
+        { code: `ADMINISTRATOR_${tenantSuffix}`, name: 'Administrator' },
+        { code: `CUSTOMER_${tenantSuffix}`,      name: 'Customer'      },
+        { code: `B2B_CUSTOMER_${tenantSuffix}`,  name: 'B2B Customer'  },
+        { code: `SUPPLIER_${tenantSuffix}`,      name: 'Supplier'      },
       ];
       for (const r of defaultRoles) {
         await db.query(
           `INSERT INTO roles (role_id, role_code, role_name, is_active, tenant_id, description)
            VALUES (gen_random_uuid(),$1,$2,true,$3,$4)
            ON CONFLICT DO NOTHING`,
-          [r.code, r.name, tenantId]
+          [r.code, r.name, tenantId, r.name + ' role']
         );
       }
       // Re-query

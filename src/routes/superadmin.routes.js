@@ -29,4 +29,6 @@ router.get  ("/users/:userId/erp-mappings",      ctrl.getUserErpMappings);
 router.post ("/users/:userId/erp-mappings",      ctrl.setUserErpMapping);
 router.post ("/tenants/:id/portal-grants",   ctrl.setPortalGrants);
 
+router.post ("/tenants/:id/repair-roles",   ctrl.repairTenantRoles);
+
 module.exports = router;
