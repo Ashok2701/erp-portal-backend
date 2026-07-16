@@ -645,13 +645,37 @@ exports.createTenantAdminUser = async (req, res) => {
     if (!tenant.rows.length)
       return res.status(404).json({ success: false, message: 'Tenant not found or not under this partner' });
 
-    // Get Administrator role for this tenant
-    const roleResult = await db.query(
+    // Get Administrator role — auto-create all default roles if missing
+    let roleResult = await db.query(
       `SELECT role_id FROM roles WHERE tenant_id=$1 AND role_name='Administrator' LIMIT 1`,
       [tenantId]
     );
+
+    if (!roleResult.rows.length) {
+      // Auto-create 4 default roles for this tenant
+      const defaultRoles = [
+        { code: 'ADMINISTRATOR', name: 'Administrator' },
+        { code: 'CUSTOMER',      name: 'Customer'      },
+        { code: 'B2B_CUSTOMER',  name: 'B2B Customer'  },
+        { code: 'SUPPLIER',      name: 'Supplier'      },
+      ];
+      for (const r of defaultRoles) {
+        await db.query(
+          `INSERT INTO roles (role_id, role_code, role_name, is_active, tenant_id, description)
+           VALUES (gen_random_uuid(),$1,$2,true,$3,$2 || ' role')
+           ON CONFLICT DO NOTHING`,
+          [r.code, r.name, tenantId]
+        );
+      }
+      // Re-query
+      roleResult = await db.query(
+        `SELECT role_id FROM roles WHERE tenant_id=$1 AND role_name='Administrator' LIMIT 1`,
+        [tenantId]
+      );
+    }
+
     if (!roleResult.rows.length)
-      return res.status(400).json({ success: false, message: 'Administrator role not found for this tenant. Configure tenant first.' });
+      return res.status(500).json({ success: false, message: 'Failed to create Administrator role. Please try again.' });
 
     const bcrypt = require('bcrypt');
     const password_hash = await bcrypt.hash(password, 10);
