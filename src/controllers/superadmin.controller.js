@@ -846,3 +846,53 @@ exports.setUserErpMapping = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// ── PORTAL <-> MODULE MAPPING (global, owner-only) ────────────
+// Replaces the old hardcoded PORTAL_MODULES map in portalGrant.model.js.
+// This affects every tenant's sidebar for a given portal, so it's gated to
+// system_role === 'owner' at the route level (see superadmin.routes.js),
+// not just is_super_admin/partner_user like the rest of this controller.
+exports.getPortalModules = async (req, res) => {
+  try {
+    const [modulesRes, mappingRes] = await Promise.all([
+      db.query(
+        `SELECT module_id, module_name, route_path, icon_name,
+                COALESCE(sort_order, 99) AS sort_order
+         FROM modules WHERE is_active = true
+         ORDER BY COALESCE(sort_order, 99), module_name`
+      ),
+      db.query(`SELECT portal_type, module_id, is_active FROM portal_module_mapping`),
+    ]);
+    res.json({
+      success: true,
+      data: { modules: modulesRes.rows, mapping: mappingRes.rows },
+    });
+  } catch (err) {
+    console.error("GET PORTAL MODULES ERROR:", err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+exports.setPortalModule = async (req, res) => {
+  try {
+    const { portal_type, module_id, is_active } = req.body;
+    const validTypes = ["CUSTOMER", "CONSIGNMENT", "SUPPLIER"];
+
+    if (!portal_type || !module_id)
+      return res.status(400).json({ success: false, message: "portal_type and module_id required" });
+    if (!validTypes.includes(portal_type))
+      return res.status(400).json({ success: false, message: `Invalid portal type: ${portal_type}` });
+
+    await db.query(
+      `INSERT INTO portal_module_mapping (portal_type, module_id, is_active)
+       VALUES ($1,$2,$3)
+       ON CONFLICT (portal_type, module_id) DO UPDATE SET is_active = EXCLUDED.is_active`,
+      [portal_type, module_id, is_active !== false]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("SET PORTAL MODULE ERROR:", err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};

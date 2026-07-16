@@ -191,6 +191,67 @@ app.get("/health", (_req, res) => res.json({ status: "ok", ts: new Date().toISOS
   } catch (err) {
     logger.error("Module seed error:", { message: err.message });
   }
+
+  // ── Portal <-> module mapping: make it configurable in SuperAdmin ──────
+  // Previously this was a hardcoded PORTAL_MODULES map in portalGrant.model.js
+  // that only a code change + redeploy could edit. Moves it into a real
+  // table, editable from SuperAdmin > Portal Modules. Runs in the same IIFE
+  // (after the module seed above, sequentially) because the default seed
+  // below needs those module rows to already exist — two separate
+  // fire-and-forget IIFEs would race.
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS portal_module_mapping (
+        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        portal_type VARCHAR(20) NOT NULL,
+        module_id   UUID NOT NULL REFERENCES modules(module_id) ON DELETE CASCADE,
+        is_active   BOOLEAN DEFAULT true,
+        created_at  TIMESTAMP DEFAULT NOW(),
+        UNIQUE (portal_type, module_id)
+      );
+    `);
+
+    // One-time seed from the lists this table replaces — only runs if the
+    // table is empty, so it never overwrites changes made via the new UI.
+    const countResult = await db.query(`SELECT COUNT(*)::int AS c FROM portal_module_mapping`);
+    if (countResult.rows[0].c === 0) {
+      const defaults = {
+        CUSTOMER: [
+          "Dashboard", "Products", "Orders", "Invoices", "Payments",
+          "Deliveries", "Sales Requests", "Sales Quote", "Credit Notes",
+          "Content Management",
+        ],
+        CONSIGNMENT: [
+          "Dashboard", "Available", "Consignment", "In Transit", "Reserved",
+          "Stock Requests", "Movements", "Overview", "Consumption",
+          "Replenishment", "Account Statement", "Orders", "Invoices",
+          "Payments", "Content Management",
+        ],
+        SUPPLIER: [
+          "Dashboard", "Products", "Cart", "Purchase Orders",
+          "Raise Purchase Request", "My Purchase Requests",
+          "Document Library", "Content Management",
+        ],
+      };
+      for (const [portalType, names] of Object.entries(defaults)) {
+        const mods = await db.query(
+          `SELECT module_id FROM modules WHERE module_name = ANY($1)`,
+          [names]
+        );
+        for (const row of mods.rows) {
+          await db.query(
+            `INSERT INTO portal_module_mapping (portal_type, module_id, is_active)
+             VALUES ($1,$2,true) ON CONFLICT DO NOTHING`,
+            [portalType, row.module_id]
+          );
+        }
+      }
+      logger.info("Seeded portal_module_mapping from defaults");
+    }
+    logger.info("portal_module_mapping table ready");
+  } catch (err) {
+    logger.error("portal_module_mapping seed error:", { message: err.message });
+  }
 })();
 
 // ── Routes ───────────────────────────────────────────────────

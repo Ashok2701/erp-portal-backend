@@ -158,22 +158,29 @@ exports.getUserPortalAccess = async (userId, tenantId) => {
 };
 
 /**
- * Get modules for a specific portal type
+ * Get modules for a specific portal type.
+ *
+ * This used to filter by the hardcoded PORTAL_MODULES map above. It now
+ * reads from portal_module_mapping instead, which is editable from
+ * SuperAdmin > Portal Modules without a code change/redeploy. PORTAL_MODULES
+ * is kept only as the one-time seed data for that table (see app.js) and by
+ * getUserPortalAccess's role filtering below, which is a separate concern
+ * (which ROLE a user needs to see a portal at all, not which MODULES that
+ * portal shows).
  */
 exports.getModulesForPortal = async (portalType, tenantId) => {
-  const moduleNames = PORTAL_MODULES[portalType] || [];
-  if (!moduleNames.length) return [];
-
   const r = await db.query(
     `SELECT m.module_id, m.module_name, m.route_path,
             m.icon_name, m.portal_mode,
             COALESCE(m.sort_order, 99) AS sort_order
-     FROM modules m
-     WHERE m.module_name = ANY($1)
+     FROM portal_module_mapping pmm
+     JOIN modules m ON m.module_id = pmm.module_id
+     WHERE pmm.portal_type = $1
+       AND pmm.is_active = true
        AND m.is_active = true
        AND (m.tenant_id IS NULL OR m.tenant_id = $2)
      ORDER BY COALESCE(m.sort_order, 99), m.module_name`,
-    [moduleNames, tenantId]
+    [portalType, tenantId]
   );
   return r.rows;
 };

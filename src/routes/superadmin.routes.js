@@ -4,6 +4,7 @@ const router       = express.Router();
 const ctrl         = require("../controllers/superadmin.controller");
 const auth         = require("../middleware/auth.middleware");
 const superadminMw = require("../middleware/superadmin.middleware");
+const { ownerOnly } = require("../middleware/partner.middleware");
 
 const { validate, schemas } = require("../middleware/validation.middleware");
 // All routes require auth + superadmin
@@ -30,5 +31,11 @@ router.post ("/users/:userId/erp-mappings",      ctrl.setUserErpMapping);
 router.post ("/tenants/:id/portal-grants",   ctrl.setPortalGrants);
 
 router.post ("/tenants/:id/repair-roles",   ctrl.repairTenantRoles);
+
+// ── Portal <-> module mapping (global, affects every tenant's sidebar) ──
+// Owner-only: a partner_user shouldn't be able to change what every OTHER
+// partner's tenants see in their nav.
+router.get  ("/portal-modules", ownerOnly, ctrl.getPortalModules);
+router.post ("/portal-modules", ownerOnly, ctrl.setPortalModule);
 
 module.exports = router;
