@@ -279,19 +279,31 @@ exports.createTenantUser = async (req, res) => {
       if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
-    const { username, email, full_name, password, role_name = 'Customer', portal_mode = 'b2c' } = req.body;
+    const {
+      username, email, full_name, password,
+      role_name    = 'Customer',
+      portal_mode  = 'b2c',
+      default_role,
+      erp_mappings = [],   // [{ portal_type, erp_entity_type, erp_entity_code, allowedsite }]
+    } = req.body;
+
     if (!username || !email || !password)
       return res.status(400).json({ success: false, message: 'username, email and password required' });
 
     const bcrypt = require('bcrypt');
     const hash   = await bcrypt.hash(password, 10);
 
+    // Map default_role to portal_mode
+    const resolvedPortalMode = portal_mode ||
+      (default_role === 'Supplier' ? 'both' :
+       default_role === 'B2B Customer' ? 'b2b' : 'b2c');
+
     const userResult = await db.query(
       `INSERT INTO users (username, email, full_name, password_hash, is_active, status,
-        system_role, portal_mode, tenant_id)
-       VALUES ($1,$2,$3,$4,true,'ACTIVE','tenant_user',$5,$6)
+        system_role, portal_mode, tenant_id, default_role)
+       VALUES ($1,$2,$3,$4,true,'ACTIVE','tenant_user',$5,$6,$7)
        RETURNING user_id, username, email, full_name, is_active, status, created_at`,
-      [username, email, full_name, hash, portal_mode, tenantId]
+      [username, email, full_name, hash, resolvedPortalMode, tenantId, default_role || role_name]
     );
     const user = userResult.rows[0];
 
@@ -368,7 +380,46 @@ exports.createTenantUser = async (req, res) => {
       );
     }
 
-    res.status(201).json({ success: true, data: { ...user, role_name } });
+    // Assign additional roles from erp_mappings (for multi-portal users)
+    const portalToRole = {
+      'CUSTOMER':    'Customer',
+      'CONSIGNMENT': 'B2B Customer',
+      'SUPPLIER':    'Supplier',
+    };
+    for (const mapping of erp_mappings) {
+      const additionalRole = portalToRole[mapping.portal_type];
+      if (additionalRole && additionalRole !== role_name) {
+        const addRoleRes = await db.query(
+          `SELECT role_id FROM roles WHERE tenant_id=$1 AND LOWER(role_name)=LOWER($2) LIMIT 1`,
+          [tenantId, additionalRole]
+        );
+        if (addRoleRes.rows.length) {
+          await db.query(
+            `INSERT INTO user_roles (user_role_id, user_id, role_id)
+             VALUES (gen_random_uuid(),$1,$2) ON CONFLICT DO NOTHING`,
+            [user.user_id, addRoleRes.rows[0].role_id]
+          );
+        }
+      }
+
+      // Save ERP mapping for this portal
+      if (mapping.erp_entity_code) {
+        await db.query(
+          `INSERT INTO user_role_erp_mapping
+             (user_id, portal_type, erp_entity_type, erp_entity_code, allowedsite, is_default)
+           VALUES ($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (user_id, portal_type)
+           DO UPDATE SET erp_entity_type=$3, erp_entity_code=$4, allowedsite=$5, is_default=$6`,
+          [user.user_id, mapping.portal_type,
+           mapping.erp_entity_type || 'customer',
+           mapping.erp_entity_code,
+           mapping.allowedsite || '',
+           mapping.portal_type === (default_role ? portalToRole[Object.keys(portalToRole).find(k => portalToRole[k] === default_role)] : 'CUSTOMER')]
+        );
+      }
+    }
+
+    res.status(201).json({ success: true, data: { ...user, role_name, default_role } });
   } catch (err) {
     if (err.code === '23505')
       return res.status(400).json({ success: false, message: 'Username or email already exists' });
