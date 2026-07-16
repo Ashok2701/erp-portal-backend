@@ -360,16 +360,14 @@ exports.createTenantUser = async (req, res) => {
         );
         if (!rr.rows.length) continue;
         const rid = rr.rows[0].role_id;
+        const isAdmin = roleName === 'Administrator';
         for (const modName of modules) {
           await db.query(
             `INSERT INTO role_modules (role_module_id, role_id, module_id, can_view, can_create, can_edit, can_delete)
-             SELECT gen_random_uuid(), $1, module_id, true,
-               CASE WHEN $2 = 'Administrator' THEN true ELSE false END,
-               CASE WHEN $2 = 'Administrator' THEN true ELSE false END,
-               CASE WHEN $2 = 'Administrator' THEN true ELSE false END
-             FROM modules WHERE module_name=$3
+             SELECT gen_random_uuid(), $1, module_id, true, $2, $2, $2
+             FROM modules WHERE module_name = $3
              ON CONFLICT DO NOTHING`,
-            [rid, roleName, modName]
+            [rid, isAdmin, modName]
           );
         }
       }
