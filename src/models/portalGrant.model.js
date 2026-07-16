@@ -20,8 +20,13 @@ const PORTAL_MODULES = {
   // Orders / Raise Purchase Request / My Purchase Requests were added this
   // session but never got modules rows, so /auth/modules?portal=SUPPLIER
   // returned almost nothing and the sidebar showed only Dashboard/Account.
+  //
+  // "Products"/"Cart" are the same catalog pages the Customer portal uses —
+  // Cart's checkout flow branches on the active portal and raises a
+  // Purchase Request instead of a Sales Order when it's SUPPLIER.
   SUPPLIER: [
-    "Dashboard", "Purchase Orders", "Raise Purchase Request",
+    "Dashboard", "Products", "Cart",
+    "Purchase Orders", "Raise Purchase Request",
     "My Purchase Requests", "Document Library", "Content Management",
   ],
 };
