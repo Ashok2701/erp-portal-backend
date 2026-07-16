@@ -10,11 +10,19 @@ const PORTAL_MODULES = {
   ],
   CONSIGNMENT: [
     "Dashboard", "Available", "Consignment", "In Transit", "Reserved",
-    "Stock Requests", "Orders", "Invoices", "Payments",
+    "Stock Requests", "Movements", "Overview", "Consumption",
+    "Replenishment", "Account Statement",
+    "Orders", "Invoices", "Payments",
     "Content Management",
   ],
+  // NOTE: these module names must have matching rows in the `modules` table
+  // (module_name + route_path) — see the seed block in app.js. Purchase
+  // Orders / Raise Purchase Request / My Purchase Requests were added this
+  // session but never got modules rows, so /auth/modules?portal=SUPPLIER
+  // returned almost nothing and the sidebar showed only Dashboard/Account.
   SUPPLIER: [
-    "Dashboard", "Purchase Requests", "Content Management",
+    "Dashboard", "Purchase Orders", "Raise Purchase Request",
+    "My Purchase Requests", "Document Library", "Content Management",
   ],
 };
 

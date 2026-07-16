@@ -145,6 +145,54 @@ app.get("/health", (_req, res) => res.json({ status: "ok", ts: new Date().toISOS
   }
 })();
 
+// ── Seed modules rows for pages built this session ────────────
+// The `modules` table drives the dynamic sidebar (GET /auth/modules and
+// PORTAL_MODULES filtering in portalGrant.model.js). It only ever had rows
+// for the original Customer-only portal — the Supplier and Consignment
+// pages/routes added this session (purchase-orders, raise-purchase-request,
+// my-purchase-requests, the inventory sub-pages, consumption, replenishment,
+// statement) never got corresponding rows, so those portals' sidebars
+// rendered almost empty regardless of what PORTAL_MODULES listed. This is
+// a one-time idempotent backfill (checks existing module_name first, since
+// we don't have a guaranteed unique constraint to rely on ON CONFLICT).
+(async () => {
+  const db = require("./config/db");
+  const newModules = [
+    { name: "Overview",               path: "/inventory/overview",     icon: "box",        sort: 60 },
+    { name: "Available",              path: "/inventory/availability", icon: "package",    sort: 61 },
+    { name: "Consignment",            path: "/inventory/consignment",  icon: "box",        sort: 62 },
+    { name: "In Transit",             path: "/inventory/in-transit",   icon: "truck",      sort: 63 },
+    { name: "Reserved",               path: "/inventory/reserved",     icon: "shield",     sort: 64 },
+    { name: "Stock Requests",         path: "/inventory/requests",     icon: "clipboard",  sort: 65 },
+    { name: "Movements",              path: "/inventory/movements",    icon: "default",    sort: 66 },
+    { name: "Consumption",            path: "/consumption",            icon: "default",    sort: 67 },
+    { name: "Replenishment",          path: "/replenishment",          icon: "default",    sort: 68 },
+    { name: "Account Statement",      path: "/statement",              icon: "file-text",  sort: 69 },
+    { name: "Purchase Orders",        path: "/purchase-orders",        icon: "clipboard",  sort: 70 },
+    { name: "Raise Purchase Request", path: "/raise-purchase-request", icon: "file-text",  sort: 71 },
+    { name: "My Purchase Requests",   path: "/my-purchase-requests",   icon: "clipboard",  sort: 72 },
+    { name: "Document Library",       path: "/admin/documents",        icon: "file-text",  sort: 73 },
+  ];
+  try {
+    const existing = await db.query(
+      `SELECT module_name FROM modules WHERE module_name = ANY($1)`,
+      [newModules.map(m => m.name)]
+    );
+    const existingNames = new Set(existing.rows.map(r => r.module_name));
+    for (const m of newModules) {
+      if (existingNames.has(m.name)) continue;
+      await db.query(
+        `INSERT INTO modules (module_id, module_name, route_path, icon_name, is_active, sort_order)
+         VALUES (gen_random_uuid(), $1, $2, $3, true, $4)`,
+        [m.name, m.path, m.icon, m.sort]
+      );
+      logger.info(`Seeded module: ${m.name} -> ${m.path}`);
+    }
+  } catch (err) {
+    logger.error("Module seed error:", { message: err.message });
+  }
+})();
+
 // ── Routes ───────────────────────────────────────────────────
 // Auth & signup
 app.use("/auth",           require("./routes/auth.routes"));

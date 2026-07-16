@@ -13,6 +13,7 @@ module.exports = async (req, res, next) => {
     const userResult = await db.query(
       `SELECT u.user_id, u.username, u.status, u.portal_mode,
               u.is_super_admin, u.system_role, u.tenant_id,
+              u.erp_entity_type, u.erp_entity_code, u.allowedsite,
               r.role_name,
               t.slug AS tenant_slug
        FROM users u
@@ -29,6 +30,39 @@ module.exports = async (req, res, next) => {
     const system_role = row.system_role ||
       (row.is_super_admin ? "owner" : "tenant_user");
 
+    // ── Portal-scoped ERP context ──────────────────────────────
+    // A multi-portal tenant user can have a DIFFERENT erp_entity_code per
+    // portal (user_role_erp_mapping) — e.g. a customer code for CUSTOMER/
+    // CONSIGNMENT and a supplier code for SUPPLIER. This middleware used to
+    // never set erp_entity_type/code/allowedsite on req.user at all, so
+    // every ERP-scoped query (erp.controller.js reads req.user.erp_entity_code
+    // to filter orders/invoices/etc. to the logged-in customer) always got
+    // undefined and silently returned unfiltered data for every customer.
+    // The frontend sends the active portal on every request via
+    // X-Active-Portal; look up that portal's mapping here. Falls back to
+    // the legacy single-portal columns on `users` for owner/partner/
+    // pre-multi-portal accounts.
+    let erp_entity_type = row.erp_entity_type || null;
+    let erp_entity_code = row.erp_entity_code || null;
+    let allowedsite      = row.allowedsite      || null;
+
+    if (system_role === "tenant_user" && row.tenant_id) {
+      const activePortal = req.headers["x-active-portal"] || null;
+      const mapResult = await db.query(
+        activePortal
+          ? `SELECT erp_entity_type, erp_entity_code, allowedsite
+             FROM user_role_erp_mapping WHERE user_id = $1 AND portal_type = $2 LIMIT 1`
+          : `SELECT erp_entity_type, erp_entity_code, allowedsite
+             FROM user_role_erp_mapping WHERE user_id = $1 AND is_default = true LIMIT 1`,
+        activePortal ? [decoded.user_id, activePortal] : [decoded.user_id]
+      );
+      if (mapResult.rows.length) {
+        erp_entity_type = mapResult.rows[0].erp_entity_type || erp_entity_type;
+        erp_entity_code = mapResult.rows[0].erp_entity_code || erp_entity_code;
+        allowedsite      = mapResult.rows[0].allowedsite      || allowedsite;
+      }
+    }
+
     req.user = {
       id:             decoded.user_id,
       user_id:        decoded.user_id,
@@ -40,6 +74,11 @@ module.exports = async (req, res, next) => {
       portal_mode:    row.portal_mode    || "b2c",
       is_super_admin: row.is_super_admin || false,
       system_role,
+      erp_entity_type,
+      erp_entity_code,
+      erp_customer_code: erp_entity_type === "customer" ? erp_entity_code : null,
+      erp_supplier_code: erp_entity_type === "supplier" ? erp_entity_code : null,
+      allowedsite,
     };
 
     next();

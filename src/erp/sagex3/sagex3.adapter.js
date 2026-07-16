@@ -31,33 +31,31 @@ class SageX3Adapter extends BaseERPAdapter {
 
 
 
+  // Resolves which ERP customer code to filter this request's data by.
+  //
+  // Previously this branched on user.role === "Customer" and, if that
+  // matched, re-queried the legacy single-value users.erp_entity_code
+  // column via UserModel.getUserById() — a column the multi-portal Add
+  // User Wizard never populates (ERP codes live in user_role_erp_mapping
+  // instead, one row per portal). So for every wizard-created user this
+  // returned null/undefined regardless of role, and every query built on
+  // top of it (orders, quotes, invoices, payments, deliveries, credit
+  // notes, statement — 9 call sites) silently dropped its customer filter
+  // and returned every customer's data.
+  //
+  // On top of that, user.role itself was unreliable for multi-role users:
+  // auth.middleware.js's user lookup LEFT JOINs user_roles/roles with no
+  // ORDER BY and takes an arbitrary row, so a user with 3 roles (Customer,
+  // B2B Customer, Supplier) could see any one of them show up as `role` on
+  // a given request — the "Customer" string match here was a coin flip.
+  //
+  // auth.middleware.js now resolves erp_entity_code correctly per the
+  // active portal (via X-Active-Portal + user_role_erp_mapping, with a
+  // fallback to the legacy users columns for non-portal accounts) and
+  // puts it directly on req.user. Just use that.
   async resolveCustomerCode(req) {
-
-    console.log("Inside resolveCustomerCode");
-    console.log(req);
-
     const user = req.user || req;
-
-    if (user.role === "Customer") {
-
-      const userInfo =
-        await UserModel.getUserById(
-          user.user_id
-        );
-
-      console.log("inside customer");
-      console.log(userInfo[0]);
-
-      return userInfo[0].erp_entity_code;
-    }
-
-    if (user.role === "salesrep") {
-      throw new Error(
-        "customer_code is required for salesrep"
-      );
-    }
-
-    return null;
+    return user.erp_entity_code || user.erp_customer_code || null;
   }
 
   async getCustomers(filters = {}) {
