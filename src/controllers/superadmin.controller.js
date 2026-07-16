@@ -409,6 +409,152 @@ exports.toggleTenantUser = async (req, res) => {
   }
 };
 
+// ── TENANT SETUP STATUS ─────────────────────────────────────────
+exports.getTenantSetupStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (req.user.system_role === 'partner_user') {
+      const allowed = await verifyPartnerAccess(req, id);
+      if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    }
+
+    const TenantSettingsModel = require('../models/tenantSettings.model');
+    const PortalGrantModel    = require('../models/portalGrant.model');
+
+    const [tenantResult, settings, portalGrants, usersResult] = await Promise.all([
+      db.query('SELECT * FROM tenants WHERE tenant_id=$1', [id]),
+      TenantSettingsModel.getTenantSettings(id),
+      PortalGrantModel.getActivePortalTypes(id),
+      db.query(
+        `SELECT u.user_id, u.username, u.system_role, u.is_active,
+                u.default_role,
+                (SELECT r.role_name FROM user_roles ur
+                 JOIN roles r ON r.role_id = ur.role_id
+                 WHERE ur.user_id = u.user_id LIMIT 1) AS role_name
+         FROM users u WHERE u.tenant_id=$1`,
+        [id]
+      ),
+    ]);
+
+    const tenant = tenantResult.rows[0];
+    const users  = usersResult.rows;
+
+    const adminUser = users.find(u =>
+      u.role_name === 'Administrator' || u.role_name === 'Admin'
+    );
+    const hasERP   = !!(settings?.erp_db_host && settings?.erp_db_user);
+    const hasX3    = !!(settings?.x3_soap_url);
+    const hasSMTP  = !!(settings?.smtp_host);
+    const hasPortals = portalGrants.length > 0;
+    const hasAdmin = !!adminUser;
+    const hasUsers = users.filter(u => u.role_name !== 'Administrator').length > 0;
+
+    const steps = [
+      {
+        key:       'create_tenant',
+        label:     'Create Tenant',
+        desc:      'Tenant has been created with a name and slug',
+        done:      true,        // always done if we got here
+        required:  true,
+        tab:       null,
+        action:    null,
+      },
+      {
+        key:       'grant_portals',
+        label:     'Configure Portal Access',
+        desc:      hasPortals
+          ? `${portalGrants.length} portal${portalGrants.length > 1 ? 's' : ''} active: ${portalGrants.join(', ')}`
+          : 'Select which portals this tenant can access (Customer / Consignment / Supplier)',
+        done:      hasPortals,
+        required:  true,
+        tab:       'portals',
+        action:    'Go to Portals tab',
+      },
+      {
+        key:       'erp_config',
+        label:     'Configure ERP Database',
+        desc:      hasERP
+          ? `Connected to: ${settings.erp_db_host} / ${settings.erp_db_name}`
+          : 'Add Sage X3 database connection credentials',
+        done:      hasERP,
+        required:  true,
+        tab:       'erp',
+        action:    'Go to ERP tab',
+      },
+      {
+        key:       'x3_soap',
+        label:     'Configure X3 Web Services (SOAP)',
+        desc:      hasX3
+          ? `SOAP URL configured: ${settings.x3_soap_url?.slice(0, 50)}...`
+          : 'Add SOAP URL for order creation (required for processing orders)',
+        done:      hasX3,
+        required:  false,
+        tab:       'x3',
+        action:    'Go to X3 tab',
+      },
+      {
+        key:       'smtp_config',
+        label:     'Configure Email (SMTP)',
+        desc:      hasSMTP
+          ? `Email server: ${settings.smtp_host}`
+          : 'Add SMTP settings for sending emails to users (optional)',
+        done:      hasSMTP,
+        required:  false,
+        tab:       'smtp',
+        action:    'Go to SMTP tab',
+      },
+      {
+        key:       'create_admin',
+        label:     'Create Admin User',
+        desc:      hasAdmin
+          ? `Admin: ${adminUser.username}`
+          : 'Create the first Administrator user for this tenant',
+        done:      hasAdmin,
+        required:  true,
+        tab:       'users',
+        action:    'Go to Users tab',
+      },
+      {
+        key:       'create_users',
+        label:     'Create Tenant Users',
+        desc:      hasUsers
+          ? `${users.length - (hasAdmin ? 1 : 0)} user${users.length > 2 ? 's' : ''} created`
+          : 'Create customer, supplier or B2B users using the Add User Wizard',
+        done:      hasUsers,
+        required:  false,
+        tab:       'users',
+        action:    'Go to Users tab',
+      },
+    ];
+
+    const completedRequired = steps.filter(s => s.required && s.done).length;
+    const totalRequired     = steps.filter(s => s.required).length;
+    const isReady           = completedRequired === totalRequired;
+    const progressPct       = Math.round((steps.filter(s => s.done).length / steps.length) * 100);
+
+    res.json({
+      success: true,
+      data: {
+        tenant_id:    id,
+        tenant_name:  tenant?.tenant_name,
+        is_test:      tenant?.is_test,
+        steps,
+        is_ready:          isReady,
+        completed_required: completedRequired,
+        total_required:     totalRequired,
+        progress_pct:       progressPct,
+        portals:    portalGrants,
+        user_count: users.length,
+      }
+    });
+  } catch (err) {
+    console.error('SETUP STATUS ERROR:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+
 // ── PORTAL GRANTS ─────────────────────────────────────────────
 const PortalGrantModel = require("../models/portalGrant.model");
 
