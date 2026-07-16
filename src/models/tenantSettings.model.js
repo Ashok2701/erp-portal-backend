@@ -1,11 +1,22 @@
 "use strict";
 const db = require("../config/db");
 
-// In-memory cache — settings loaded once per tenant per process
-const cache = {};
+// In-memory cache — settings loaded once per tenant per process.
+//
+// IMPORTANT: this cache is per-process. On a horizontally-scaled deployment
+// (multiple App Platform instances behind the LB), a settings update handled
+// by instance A calls clearCache() only on instance A — any other instance
+// that already cached this tenant keeps serving the stale row (e.g. missing
+// a password an admin just saved) until it happens to restart. A short TTL
+// bounds that staleness window so the fix shows up within CACHE_TTL_MS on
+// every instance even without a redeploy, instead of relying entirely on the
+// explicit clearCache() call reaching every instance.
+const CACHE_TTL_MS = 60 * 1000; // 60s
+const cache = {}; // tenantId -> { data, expiresAt }
 
 exports.getTenantSettings = async (tenantId) => {
-  if (cache[tenantId]) return cache[tenantId];
+  const cached = cache[tenantId];
+  if (cached && cached.expiresAt > Date.now()) return cached.data;
 
   const result = await db.query(
     `SELECT ts.*, t.slug AS tenant_slug, t.tenant_name, t.plan
@@ -43,11 +54,11 @@ exports.getTenantSettings = async (tenantId) => {
       portal_url:     process.env.PORTAL_URL,
       admin_email:    process.env.ADMIN_EMAIL,
     };
-    cache[tenantId] = s;
+    cache[tenantId] = { data: s, expiresAt: Date.now() + CACHE_TTL_MS };
     return s;
   }
 
-  cache[tenantId] = result.rows[0];
+  cache[tenantId] = { data: result.rows[0], expiresAt: Date.now() + CACHE_TTL_MS };
   return result.rows[0];
 };
 
@@ -76,13 +87,38 @@ exports.upsertTenantSettings = async (tenantId, settings) => {
         smtp_host, smtp_port, smtp_user, smtp_password, smtp_from,
         spaces_folder, portal_url, admin_email, updated_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,NOW())
+     -- COALESCE against the existing row on every field: the tenant-detail UI
+     -- saves each tab (ERP / X3 / SMTP / Branding / Storage) independently, so
+     -- a save from one tab sends a body that simply doesn't include the other
+     -- tabs' fields. Those arrive here as JS 'undefined' -> SQL NULL. Without
+     -- COALESCE, that blind overwrite silently wiped out already-configured
+     -- values (e.g. saving the SMTP tab would null out erp_db_password that
+     -- had just been set on the ERP tab) — the real reason a fix that clearly
+     -- persisted still looked broken again shortly after.
      ON CONFLICT (tenant_id) DO UPDATE SET
-       erp_system=$2, erp_db_type=$3, erp_db_host=$4, erp_db_port=$5,
-       erp_db_name=$6, erp_db_user=$7, erp_db_password=$8,
-       x3_soap_url=$9, x3_wsdl_url=$10, x3_username=$11, x3_password=$12,
-       x3_pool_alias=$13, x3_sales_site=$14, x3_order_type=$15,
-       smtp_host=$16, smtp_port=$17, smtp_user=$18, smtp_password=$19, smtp_from=$20,
-       spaces_folder=$21, portal_url=$22, admin_email=$23, updated_at=NOW()`,
+       erp_system=COALESCE($2, tenant_settings.erp_system),
+       erp_db_type=COALESCE($3, tenant_settings.erp_db_type),
+       erp_db_host=COALESCE($4, tenant_settings.erp_db_host),
+       erp_db_port=COALESCE($5, tenant_settings.erp_db_port),
+       erp_db_name=COALESCE($6, tenant_settings.erp_db_name),
+       erp_db_user=COALESCE($7, tenant_settings.erp_db_user),
+       erp_db_password=COALESCE($8, tenant_settings.erp_db_password),
+       x3_soap_url=COALESCE($9, tenant_settings.x3_soap_url),
+       x3_wsdl_url=COALESCE($10, tenant_settings.x3_wsdl_url),
+       x3_username=COALESCE($11, tenant_settings.x3_username),
+       x3_password=COALESCE($12, tenant_settings.x3_password),
+       x3_pool_alias=COALESCE($13, tenant_settings.x3_pool_alias),
+       x3_sales_site=COALESCE($14, tenant_settings.x3_sales_site),
+       x3_order_type=COALESCE($15, tenant_settings.x3_order_type),
+       smtp_host=COALESCE($16, tenant_settings.smtp_host),
+       smtp_port=COALESCE($17, tenant_settings.smtp_port),
+       smtp_user=COALESCE($18, tenant_settings.smtp_user),
+       smtp_password=COALESCE($19, tenant_settings.smtp_password),
+       smtp_from=COALESCE($20, tenant_settings.smtp_from),
+       spaces_folder=COALESCE($21, tenant_settings.spaces_folder),
+       portal_url=COALESCE($22, tenant_settings.portal_url),
+       admin_email=COALESCE($23, tenant_settings.admin_email),
+       updated_at=NOW()`,
     [tenantId, erp_system, erp_db_type, erp_db_host, erp_db_port,
      erp_db_name, erp_db_user, erp_db_password,
      x3_soap_url, x3_wsdl_url, x3_username, x3_password,
