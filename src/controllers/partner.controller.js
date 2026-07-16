@@ -228,9 +228,9 @@ exports.createTenantUnderPartner = async (req, res) => {
     for (const r of defaultRoles) {
       await db.query(
         `INSERT INTO roles (role_id, role_code, role_name, is_active, tenant_id, description)
-         VALUES (gen_random_uuid(),$1,$2,true,$3,$2 || ' role')
+         VALUES (gen_random_uuid(),$1,$2,true,$3,$4)
          ON CONFLICT DO NOTHING`,
-        [r.code, r.name, tenant.tenant_id]
+        [r.code, r.name, tenant.tenant_id, r.name + ' role']
       );
     }
 
@@ -662,7 +662,7 @@ exports.createTenantAdminUser = async (req, res) => {
       for (const r of defaultRoles) {
         await db.query(
           `INSERT INTO roles (role_id, role_code, role_name, is_active, tenant_id, description)
-           VALUES (gen_random_uuid(),$1,$2,true,$3,$2 || ' role')
+           VALUES (gen_random_uuid(),$1,$2,true,$3,$4)
            ON CONFLICT DO NOTHING`,
           [r.code, r.name, tenantId]
         );
