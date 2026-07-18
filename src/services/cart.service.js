@@ -49,16 +49,27 @@ function resolveContext(req) {
 exports.clearCart = async (req) => {
   const ctx = resolveContext(req);
 
+  // Must match the exact same 4-column filter getCart()/getOrCreateCart()
+  // use (actor_id, actor_type, party_id, party_type) — this used to only
+  // filter by actor_id + party_id, so if more than one ACTIVE cart row
+  // ever existed for the same actor/party (e.g. one created via a
+  // different actor_type path), this could delete the WRONG row's items
+  // while leaving the one getCart() actually displays untouched — the
+  // cart would appear to "come back" right after checkout even though a
+  // (different, invisible) cart really did get cleared.
   const cart = await db.query(
-    `SELECT id FROM cart WHERE actor_id=$1 AND party_id=$2 AND status='ACTIVE'`,
-    [ctx.actor_id, ctx.party_id]
+    `SELECT id FROM cart
+     WHERE actor_id=$1 AND actor_type=$2 AND party_id=$3 AND party_type=$4
+       AND status='ACTIVE'`,
+    [ctx.actor_id, ctx.actor_type, ctx.party_id, ctx.party_type]
   );
 
   if (!cart.rows.length) return;
 
-  await db.query(`DELETE FROM cart_items WHERE cart_id=$1`, [
-    cart.rows[0].id
-  ]);
+  // Clear items from every matching row, not just the first — defensive
+  // against any duplicate ACTIVE carts that may already exist.
+  const cartIds = cart.rows.map((r) => r.id);
+  await db.query(`DELETE FROM cart_items WHERE cart_id = ANY($1)`, [cartIds]);
 
   return { message: 'Cleared' };
 };
