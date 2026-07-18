@@ -172,30 +172,26 @@ exports.convertToPO = async (user, requestIds) => {
 
     const orderDate = fmt(pr.request_date || new Date());
 
-    // Build line XML
+    // Field mapping per X10CPOHCRE's actual contract (confirmed from the
+    // web service's Mapping tab — GRP1 = header, GRP2 = line list, GRP3 =
+    // output). No price field in GRP2 — X3 resolves pricing itself from
+    // the item/supplier price list, it isn't passed in.
     let linesXml = "";
     pr.items.forEach((item, idx) => {
       linesXml += `
 <LIN NUM="${idx + 1}">
 <FLD NAME="I_XITMREF" TYPE="Char">${item.product_code}</FLD>
-<FLD NAME="I_XQTY" TYPE="Decimal">${parseFloat(item.quantity) || 1}</FLD>
+<FLD NAME="I_QTYUOM" TYPE="Decimal">${parseFloat(item.quantity) || 1}</FLD>
 <FLD NAME="I_XUOM" TYPE="Char">${item.unit || "UN"}</FLD>
-<FLD NAME="I_XGROPRI" TYPE="Decimal">${parseFloat(item.price) || 0}</FLD>
 </LIN>`;
     });
 
     const value = `
 <![CDATA[<PARAM>
 <GRP ID="GRP1">
-<FLD NAME="I_XFLAG" TYPE="Integer">0</FLD>
-<FLD NAME="I_XVCRNUM" TYPE="Char"></FLD>
-<FLD NAME="I_XFCY" TYPE="Char">${pr.site || settings.x3_sales_site}</FLD>
-<FLD NAME="I_XBPSNUM" TYPE="Char">${pr.supplier_code}</FLD>
+<FLD NAME="I_XPOHFCY" TYPE="Char">${pr.site || settings.x3_sales_site}</FLD>
 <FLD NAME="I_XORDDAT" TYPE="Date">${orderDate}</FLD>
-<FLD NAME="I_XRCPDAT" TYPE="Date">${orderDate}</FLD>
-<FLD NAME="I_XUSERID" TYPE="Char">${user.username || "ADMIN"}</FLD>
-<FLD NAME="I_XCOMMENTS" TYPE="Char">${pr.comment || ""}</FLD>
-<FLD NAME="I_XUNIQUENO" TYPE="Char">${prId}</FLD>
+<FLD NAME="I_XBPSNUM" TYPE="Char">${pr.supplier_code}</FLD>
 </GRP>
 <TAB ID="GRP2" DIM="500" SIZE="${pr.items.length}">
 ${linesXml}
@@ -253,23 +249,26 @@ ${linesXml}
         }
       });
 
-      const statusFlag = allFields.O_XSFLG;
-      const statusMessage = allFields.O_XSMESS || allFields.O_XERROR || allFields.O_XMESSAGE;
-      const poNumber =
-        allFields.O_XPOHNUM || allFields.O_XSOHNUM || allFields.POHNUM_0 || null;
+      // GRP3 output fields, per the confirmed mapping.
+      const poNumber      = allFields.O_XPOHNUM || null;
+      const status        = allFields.O_XSTATUS;
+      const message1       = allFields.O_XMESSAGE1 || "";
+      const message2       = allFields.O_XMESSAGE2 || "";
+      const statusMessage = [message1, message2].filter(Boolean).join(" — ");
 
-      if (poNumber && (statusFlag === "2" || statusFlag === undefined)) {
+      if (poNumber) {
         await db.query(
           `UPDATE purchase_requests SET status='CONVERTED', erp_po_number=$1
            WHERE purchase_request_id=$2`,
           [poNumber, prId]
         );
-        results.push({ id: prId, success: true, po_number: poNumber });
+        results.push({ id: prId, success: true, po_number: poNumber, status, message: statusMessage });
       } else {
         results.push({
           id: prId,
           success: false,
           error: statusMessage || "PO number not returned from X3",
+          status,
           erp_response_fields: allFields,
         });
       }
