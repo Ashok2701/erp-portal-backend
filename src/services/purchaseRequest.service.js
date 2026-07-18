@@ -77,10 +77,27 @@ exports.getAll = async (user) => {
               ORDER BY pr.created_at DESC`;
     params = [user.tenant_id];
   } else {
-    query  = `SELECT * FROM purchase_requests
-              WHERE user_id = $1 AND tenant_id = $2
-              ORDER BY created_at DESC`;
-    params = [user.user_id, user.tenant_id];
+    // Filter by the supplier entity (erp_entity_code / erp_supplier_code),
+    // not by whichever individual user_id happened to submit each request —
+    // a supplier can have more than one login (e.g. different staff), and
+    // they should all see the same shared list of requests raised for
+    // their supplier entity, same as Purchase Orders already do. Fall back
+    // to user_id only if no supplier code is resolvable yet (ERP mapping
+    // not configured), so nothing silently returns zero rows.
+    const supplierCode = user.erp_entity_code || user.erp_supplier_code || null;
+    if (supplierCode) {
+      query  = `SELECT pr.*, u.username, u.full_name
+                FROM purchase_requests pr
+                LEFT JOIN users u ON u.user_id = pr.user_id
+                WHERE pr.supplier_code = $1 AND pr.tenant_id = $2
+                ORDER BY pr.created_at DESC`;
+      params = [supplierCode, user.tenant_id];
+    } else {
+      query  = `SELECT * FROM purchase_requests
+                WHERE user_id = $1 AND tenant_id = $2
+                ORDER BY created_at DESC`;
+      params = [user.user_id, user.tenant_id];
+    }
   }
 
   const r = await db.query(query, params);

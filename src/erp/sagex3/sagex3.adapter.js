@@ -1657,8 +1657,7 @@ class SageX3Adapter extends BaseERPAdapter {
         P.ORDNOT_0   AS total_before_tax,
         P.ORDATI_0   AS total_after_tax,
         P.PSHSTA_0   AS status,
-        P.INVSTA_0   AS invoice_status,
-        P.RCPSTA_0   AS receipt_status
+        P.INVSTA_0   AS invoice_status
       FROM tbs.LEWISB.PORDER P
       LEFT JOIN LEWISB.BPSUPPLIER BP ON BP.BPSNUM_0 = P.BPSNUM_0
       WHERE P.BPSNUM_0 = @supplierCode
@@ -1710,7 +1709,6 @@ class SageX3Adapter extends BaseERPAdapter {
           P.ORDATI_0   AS total_after_tax,
           P.PSHSTA_0   AS status,
           P.INVSTA_0   AS invoice_status,
-          P.RCPSTA_0   AS receipt_status,
           P.PTE_0      AS payment_terms,
           F.FCYNAM_0   AS site_name
         FROM tbs.LEWISB.PORDER P
