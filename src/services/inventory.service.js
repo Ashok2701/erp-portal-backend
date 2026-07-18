@@ -6,20 +6,30 @@
 // ============================================================
 
 const ERPFactory  = require("../erp/erp.factory");
-const UserModel   = require("../models/user.model");
 
-// ── resolve user's site + customer code from Postgres ────────
-async function resolveUserContext(user) {
-  const userId  = user.user_id || user.id;
-  const userInfo = await UserModel.getUserById(userId);
-  const u        = userInfo[0] || {};
+// ── resolve user's site + entity code for the ACTIVE portal ──
+// Previously this re-queried UserModel.getUserById() — the same legacy,
+// single-value users columns the multi-portal Add User Wizard never
+// writes to (ERP codes live in user_role_erp_mapping, one row per portal).
+// That's the exact bug already fixed for orders/quotes/invoices/etc. in
+// sagex3.adapter.js's resolveCustomerCode(): auth.middleware.js now
+// resolves erp_entity_code/allowedsite correctly per the request's active
+// portal (X-Active-Portal header + user_role_erp_mapping) and puts them
+// directly on req.user — just use that instead of re-deriving anything.
+// This was silently returning customerCode: null for every wizard-created
+// user, so getStockFromDb()'s `AND S.LOCATION = @warehouse` filter never
+// ran and every inventory view (consignment, available, in-transit,
+// reserved, projected) returned stock across every location, not just
+// the ones belonging to this user's entity.
+function resolveUserContext(user) {
+  const userId = user.user_id || user.id;
   return {
     user_id:      userId,
     user_id_str:  String(userId),
-    site:         u.allowedsite        || null,
-    customerCode: u.erp_entity_code    || null,
-    entityType:   u.erp_entity_type    || "customer",
-    role:         user.role            || "Customer",
+    site:         user.allowedsite      || null,
+    customerCode: user.erp_entity_code || user.erp_customer_code || user.erp_supplier_code || null,
+    entityType:   user.erp_entity_type  || "customer",
+    role:         user.role             || "Customer",
   };
 }
 
