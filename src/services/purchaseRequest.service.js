@@ -273,7 +273,22 @@ ${linesXml}
         });
       }
     } catch (soapErr) {
-      results.push({ id: prId, success: false, error: soapErr.message });
+      // The soap library doesn't always throw a plain Error with .message
+      // set — SOAP faults frequently come back as structured objects
+      // instead, so soapErr.message can be undefined. JSON.stringify
+      // silently drops keys whose value is undefined, which is exactly
+      // why a failed conversion was showing up as just {id, success:
+      // false} with no error text at all client-side. Log the raw error
+      // server-side and fall back through several likely shapes so the
+      // client always gets *something* useful.
+      console.error("PO CONVERT SOAP ERROR:", soapErr);
+      const faultMessage =
+        soapErr?.message ||
+        soapErr?.root?.Envelope?.Body?.Fault?.faultstring ||
+        soapErr?.body ||
+        (typeof soapErr === "string" ? soapErr : null) ||
+        "SOAP call failed — see server logs for details";
+      results.push({ id: prId, success: false, error: faultMessage });
     }
   }
 
