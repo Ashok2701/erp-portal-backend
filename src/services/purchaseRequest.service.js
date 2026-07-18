@@ -204,17 +204,61 @@ ${linesXml}
 ]]>`;
 
     try {
-      const [result] = await soapClient.runAsync({
-        callContext,
-        publicName: "ZPURCHASEORDER",
-        inputXml:   value,
+      // Same call pattern as generateOrder() (sales order creation) in
+      // salesRequest.service.js — callContext/publicName/inputXml wrapped
+      // with explicit xsi:type attributes via client.run(), not the plain
+      // object shape runAsync() was using before. Web service name per
+      // instruction: X10CPOHCRE (was "ZPURCHASEORDER", which doesn't
+      // appear to be a real X3 web service name — likely why this was
+      // never actually verified working).
+      const response = await new Promise((resolve, reject) => {
+        soapClient.run(
+          {
+            callContext: {
+              $xml: callContext,
+              attributes: { "xsi:type": "wss:CAdxCallContext" },
+            },
+            publicName: {
+              attributes: { "xsi:type": "xsd:string" },
+              $value: "X10CPOHCRE",
+            },
+            inputXml: {
+              attributes: { "xsi:type": "xsd:string" },
+              $xml: value,
+            },
+          },
+          (error, resp) => {
+            if (error) return reject(error);
+            resolve(resp);
+          }
+        );
       });
 
-      const xml = result?.runReturn?.resultXml || result?.resultXml || "";
-      const poMatch = xml.match(/<FLD[^>]*NAME="POHNUM_0"[^>]*>([^<]+)<\/FLD>/);
-      const poNumber = poMatch?.[1] || null;
+      console.log("=================================");
+      console.log("PO SOAP RESPONSE (X10CPOHCRE)");
+      console.log("=================================");
+      console.log(JSON.stringify(response, null, 2));
 
-      if (poNumber) {
+      const resultData = response?.runReturn?.resultXml?.$value?.RESULT;
+      const responseGroups = resultData?.GRP || [];
+
+      // Flatten every group's fields — same reasoning as generateOrder():
+      // we don't have confirmed documentation for exactly which GRP/field
+      // X10CPOHCRE returns the new PO number and status under, so capture
+      // everything rather than guess a single field name and silently fail.
+      const allFields = {};
+      responseGroups.forEach((g) => {
+        if (g?.FLD?.length > 0) {
+          g.FLD.forEach((f) => { allFields[f.attributes.NAME] = f.$value || ""; });
+        }
+      });
+
+      const statusFlag = allFields.O_XSFLG;
+      const statusMessage = allFields.O_XSMESS || allFields.O_XERROR || allFields.O_XMESSAGE;
+      const poNumber =
+        allFields.O_XPOHNUM || allFields.O_XSOHNUM || allFields.POHNUM_0 || null;
+
+      if (poNumber && (statusFlag === "2" || statusFlag === undefined)) {
         await db.query(
           `UPDATE purchase_requests SET status='CONVERTED', erp_po_number=$1
            WHERE purchase_request_id=$2`,
@@ -222,7 +266,12 @@ ${linesXml}
         );
         results.push({ id: prId, success: true, po_number: poNumber });
       } else {
-        results.push({ id: prId, success: false, error: "PO number not returned from X3", xml });
+        results.push({
+          id: prId,
+          success: false,
+          error: statusMessage || "PO number not returned from X3",
+          erp_response_fields: allFields,
+        });
       }
     } catch (soapErr) {
       results.push({ id: prId, success: false, error: soapErr.message });
