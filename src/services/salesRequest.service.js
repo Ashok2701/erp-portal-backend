@@ -613,7 +613,12 @@ ${product}
 
         const responseGroups = resultData?.GRP || [];
 
-        // FIND GRP3
+        // FIND GRP3 (primary status group), but also flatten every
+        // group's fields — some failures come back without GRP3 populated
+        // at all, or with the error message under a different field/group
+        // than O_XSMESS, and silently falling back to a generic message
+        // ("Order creation failed") makes every real X3-side rejection
+        // (bad site, bad customer code, bad item code, etc.) indistinguishable.
         const grp3 = responseGroups.find(
           (g) => g.attributes?.ID === "GRP3"
         );
@@ -628,10 +633,24 @@ ${product}
           });
         }
 
-        // RESPONSE VALUES
-        const statusFlag = grp3Fields.O_XSFLG;
-        const statusMessage = grp3Fields.O_XSMESS;
-        const erpOrderNo = grp3Fields.O_XSOHNUM;
+        // All fields across all groups — kept alongside the failure result
+        // so the actual X3 response is visible without needing server logs.
+        const allFields = {};
+        responseGroups.forEach((g) => {
+          if (g?.FLD?.length > 0) {
+            g.FLD.forEach((f) => {
+              allFields[f.attributes.NAME] = f.$value || "";
+            });
+          }
+        });
+
+        // RESPONSE VALUES — fall back to any group's fields if GRP3 didn't
+        // have them (some X3 setups return the message/status elsewhere).
+        const statusFlag = grp3Fields.O_XSFLG || allFields.O_XSFLG;
+        const statusMessage =
+          grp3Fields.O_XSMESS || allFields.O_XSMESS ||
+          allFields.O_XERROR  || allFields.O_XMESSAGE || allFields.MESSAGE;
+        const erpOrderNo = grp3Fields.O_XSOHNUM || allFields.O_XSOHNUM;
 
         // ============================================
         // SUCCESS
@@ -670,7 +689,10 @@ ${product}
           results.push({
             drop_request_id: dropRequestId,
             success: false,
-            error: statusMessage || "Order creation failed",
+            error: statusMessage || "Order creation failed — X3 returned no error detail",
+            // Debug aid: raw fields from the SOAP response so the real
+            // reason is visible in the API response, not just server logs.
+            erp_response_fields: allFields,
           });
         }
       }
