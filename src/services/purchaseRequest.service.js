@@ -136,11 +136,23 @@ exports.updateStatus = async (id, tenantId, status) => {
 exports.convertToPO = async (user, requestIds) => {
   const settings = await TenantSettings.getTenantSettings(user.tenant_id);
 
-  if (!settings?.x3_wsdl_url)
+  if (!settings?.x3_wsdl_url && !process.env.X3_WSDL_URL)
     throw Object.assign(new Error("X3 SOAP not configured for this tenant"), { code: "ERP_NOT_CONFIGURED" });
 
+  // Same env-var fallback pattern as generateOrder() (Sales Order) in
+  // salesRequest.service.js — this was missing here entirely, and is very
+  // likely why conversion was failing with "Authentication failed": if
+  // settings.x3_username/x3_password aren't populated (or are stale) for
+  // this tenant, BasicAuthSecurity got literal undefined instead of
+  // falling back to the shared X3_USERNAME/X3_PASSWORD env vars the way
+  // Sales Order generation does.
+  const wsdlUrl   = settings?.x3_wsdl_url   || process.env.X3_WSDL_URL;
+  const x3User    = settings?.x3_username   || process.env.X3_USERNAME;
+  const x3Pass    = settings?.x3_password   || process.env.X3_PASSWORD;
+  const poolAlias = settings?.x3_pool_alias || process.env.X3_POOL_ALIAS;
+
   // Create SOAP client
-  const soapClient = await soap.createClientAsync(settings.x3_wsdl_url, {
+  const soapClient = await soap.createClientAsync(wsdlUrl, {
     attributesKey: "attributes",
     valueKey:      "$value",
     xmlKey:        "$xml",
@@ -148,14 +160,14 @@ exports.convertToPO = async (user, requestIds) => {
   });
 
   soapClient.setSecurity(
-    new soap.BasicAuthSecurity(settings.x3_username, settings.x3_password, "")
+    new soap.BasicAuthSecurity(x3User, x3Pass, "")
   );
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 
   const callContext = `
 <codeLang xsi:type="xsd:string">ENG</codeLang>
-<poolAlias xsi:type="xsd:string">${settings.x3_pool_alias}</poolAlias>
-<poolId xsi:type="xsd:string">${settings.x3_pool_alias}</poolId>
+<poolAlias xsi:type="xsd:string">${poolAlias}</poolAlias>
+<poolId xsi:type="xsd:string">${poolAlias}</poolId>
 <requestConfig xsi:type="xsd:string">adxwss.optreturn=XML</requestConfig>`;
 
   const results = [];
@@ -189,7 +201,7 @@ exports.convertToPO = async (user, requestIds) => {
     const value = `
 <![CDATA[<PARAM>
 <GRP ID="GRP1">
-<FLD NAME="I_XPOHFCY" TYPE="Char">${pr.site || settings.x3_sales_site}</FLD>
+<FLD NAME="I_XPOHFCY" TYPE="Char">${pr.site || settings?.x3_sales_site || process.env.X3_SALES_SITE}</FLD>
 <FLD NAME="I_XORDDAT" TYPE="Date">${orderDate}</FLD>
 <FLD NAME="I_XBPSNUM" TYPE="Char">${pr.supplier_code}</FLD>
 </GRP>
