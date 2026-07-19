@@ -252,7 +252,7 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
       tagged("unsignedDocs", db.query(
         `SELECT c.id AS content_id, c.title, ld.id AS legal_doc_id
          FROM content c
-         JOIN legal_documents ld ON ld.id=c.legal_document_id
+         JOIN legal_documents ld ON ld.id::text=c.legal_document_id::text
          WHERE c.type='DOCUMENT'
          AND EXISTS (
            SELECT 1 FROM content_targets ct
