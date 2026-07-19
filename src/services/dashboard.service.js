@@ -203,18 +203,26 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
   const toTs   = `${dateTo}   23:59:59`;
 
   // ── 1. Portal DB queries (always available) ──────────────────────
+  // Each query is individually labeled so a failure identifies exactly
+  // which query broke instead of a single opaque Promise.all rejection
+  // (diagnostic aid added while tracking down a uuid/varchar cast bug).
+  const tagged = (label, promise) => promise.catch(e => {
+    e.message = `[${label}] ${e.message}`;
+    throw e;
+  });
+
   let openReq, recentOrders, pipeline, unsignedDocs, unreadContent, approvalStatus;
   try {
     [openReq, recentOrders, pipeline, unsignedDocs, unreadContent, approvalStatus] = await Promise.all([
       // Open requests: all not-yet-completed portal requests
-      db.query(
+      tagged("openReq", db.query(
         `SELECT COUNT(*) FROM sales_requests
          WHERE user_id=$1
          AND UPPER(status) IN ('CREATED','REQUEST_CREATED','DRAFT','PENDING')`,
         [uid]
-      ),
+      )),
       // Recent portal requests (last 10)
-      db.query(
+      tagged("recentOrders", db.query(
         `SELECT sr.drop_request_id AS request_no,
                 DATE(sr.request_date)  AS date,
                 (SELECT COUNT(*) FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id) AS products_count,
@@ -226,14 +234,14 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
          WHERE sr.user_id=$1
          ORDER BY sr.request_date DESC LIMIT 10`,
         [uid]
-      ),
+      )),
       // Pipeline counts by status
-      db.query(
+      tagged("pipeline", db.query(
         `SELECT status, COUNT(*) FROM sales_requests WHERE user_id=$1 GROUP BY status`,
         [uid]
-      ),
+      )),
       // Unsigned legal documents
-      db.query(
+      tagged("unsignedDocs", db.query(
         `SELECT c.id AS content_id, c.title, ld.id AS legal_doc_id
          FROM content c
          JOIN legal_documents ld ON ld.id=c.legal_document_id
@@ -251,9 +259,9 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
          )
          LIMIT 5`,
         [uid]
-      ),
+      )),
       // Unread content
-      db.query(
+      tagged("unreadContent", db.query(
         `SELECT c.id, c.title, c.type, c.message, c.priority, c.created_at
          FROM content c
          JOIN content_targets ct ON ct.content_id=c.id
@@ -263,9 +271,9 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
          AND c.created_at >= NOW() - INTERVAL '30 days'
          ORDER BY c.created_at DESC LIMIT 8`,
         [uid]
-      ),
+      )),
       // Account status
-      db.query(`SELECT status FROM users WHERE user_id=$1`, [uid]),
+      tagged("approvalStatus", db.query(`SELECT status FROM users WHERE user_id=$1`, [uid])),
     ]);
   } catch (qErr) {
     console.error("Dashboard portal query error:", qErr.message);
