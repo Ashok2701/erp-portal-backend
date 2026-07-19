@@ -242,12 +242,12 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
            SELECT 1 FROM content_targets ct
            WHERE ct.content_id=c.id
            AND (ct.target_value=$1::text
-                OR ct.target_value=(SELECT role_id::text FROM user_roles WHERE user_id=$1 LIMIT 1)
+                OR ct.target_value=(SELECT role_id::text FROM user_roles WHERE user_id=$1::uuid LIMIT 1)
                 OR ct.target_type='ALL')
          )
          AND NOT EXISTS (
            SELECT 1 FROM user_signed_documents usd
-           WHERE usd.user_id=$1 AND usd.legal_document_id=ld.id
+           WHERE usd.user_id=$1::uuid AND usd.legal_document_id=ld.id
          )
          LIMIT 5`,
         [uid]
@@ -259,7 +259,7 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
          JOIN content_targets ct ON ct.content_id=c.id
          WHERE c.type IN ('OFFER','ANNOUNCEMENT','MESSAGE')
          AND (ct.target_value=$1::text OR ct.target_type='ALL'
-              OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$1))
+              OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$1::uuid))
          AND c.created_at >= NOW() - INTERVAL '30 days'
          ORDER BY c.created_at DESC LIMIT 8`,
         [uid]
