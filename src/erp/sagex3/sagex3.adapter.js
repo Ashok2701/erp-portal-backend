@@ -1644,19 +1644,27 @@ class SageX3Adapter extends BaseERPAdapter {
     const req = pool.request();
     req.input('supplierCode', sql.NVarChar, supplierCode);
 
+    // NOTE: this tenant's PORDER/PORDERQ tables do NOT match the field names
+    // this query originally assumed (confirmed via a live INFORMATION_SCHEMA.COLUMNS
+    // check -- see debugListColumns). Confident renames applied: PSHNUM_0->POHNUM_0
+    // (po number), IPTFCY_0->POHFCY_0 (site). Fields with NO confident equivalent
+    // on this schema (expected_date, total_before_tax, total_after_tax, status)
+    // are deliberately left OUT rather than mapped to a guessed column -- silently
+    // wrong amounts are worse than a missing field. Same for line-level received_qty,
+    // unit, unit_price, expected_date: PORDERQ has differently-shaped fields
+    // (RCPQTYPUU_0/RCPQTYSTU_0, PUU_0/STU_0/UOM_0, CPR_0/CPRPRI_0, EXTRCPDAT_0/
+    // RETRCPDAT_0/LASRCPDAT_0) with no single obvious 1:1 mapping without
+    // confirming the actual business meaning with whoever configured this X3
+    // instance. TODO: revisit once that's confirmed.
     const result = await req.query(`
       SELECT TOP 100
-        P.PSHNUM_0   AS po_number,
+        P.POHNUM_0   AS po_number,
         P.BPSNUM_0   AS supplier_code,
         BP.BPSNAM_0  AS supplier_name,
         P.POHTYP_0   AS po_type,
         P.ORDDAT_0   AS order_date,
-        P.RCPDAT_0   AS expected_date,
-        P.IPTFCY_0   AS site,
-        P.CUR_0      AS currency,
-        P.ORDNOT_0   AS total_before_tax,
-        P.ORDATI_0   AS total_after_tax,
-        P.PSHSTA_0   AS status
+        P.POHFCY_0   AS site,
+        P.CUR_0      AS currency
       FROM tbs.LEWISB.PORDER P
       LEFT JOIN LEWISB.BPSUPPLIER BP ON BP.BPSNUM_0 = P.BPSNUM_0
       WHERE P.BPSNUM_0 = @supplierCode
@@ -1672,15 +1680,11 @@ class SageX3Adapter extends BaseERPAdapter {
         .query(`
           SELECT
             L.ITMREF_0   AS product_code,
-            L.ITMDES1_0  AS description,
-            L.QTYUOM_0   AS ordered_qty,
-            L.RCPQTY_0   AS received_qty,
-            L.SAU_0      AS unit,
-            L.GROPRI_0   AS unit_price,
-            (L.QTYUOM_0 * L.GROPRI_0) AS line_total,
-            L.EXTDLVDAT_0 AS expected_date
+            I.ITMDES1_0  AS description,
+            L.QTYUOM_0   AS ordered_qty
           FROM tbs.LEWISB.PORDERQ L
-          WHERE L.PSHNUM_0 = @poNum
+          LEFT JOIN LEWISB.ITMMASTER I ON I.ITMREF_0 = L.ITMREF_0
+          WHERE L.POHNUM_0 = @poNum
         `);
       po.lines = lineResult.recordset;
     }
@@ -1692,27 +1696,28 @@ class SageX3Adapter extends BaseERPAdapter {
     const pool = await this.poolPromise;
     if (!poNumber) return null;
 
+    // NOTE: see getAllPurchaseOrders() above -- same schema mismatch, same
+    // confident renames (PSHNUM_0->POHNUM_0, IPTFCY_0->POHFCY_0), same
+    // deliberate omission of fields with no confident equivalent rather
+    // than a guessed mapping (expected_date, total_before_tax,
+    // total_after_tax, status, received_qty, pending_qty, unit, unit_price).
     const result = await pool.request()
       .input('poNum', sql.NVarChar, poNumber)
       .query(`
         SELECT
-          P.PSHNUM_0   AS po_number,
+          P.POHNUM_0   AS po_number,
           P.BPSNUM_0   AS supplier_code,
           BP.BPSNAM_0  AS supplier_name,
           P.POHTYP_0   AS po_type,
           P.ORDDAT_0   AS order_date,
-          P.RCPDAT_0   AS expected_date,
-          P.IPTFCY_0   AS site,
+          P.POHFCY_0   AS site,
           P.CUR_0      AS currency,
-          P.ORDNOT_0   AS total_before_tax,
-          P.ORDATI_0   AS total_after_tax,
-          P.PSHSTA_0   AS status,
           P.PTE_0      AS payment_terms,
           F.FCYNAM_0   AS site_name
         FROM tbs.LEWISB.PORDER P
         LEFT JOIN LEWISB.BPSUPPLIER BP ON BP.BPSNUM_0 = P.BPSNUM_0
-        LEFT JOIN LEWISB.FACILITY F    ON F.FCY_0 = P.IPTFCY_0
-        WHERE P.PSHNUM_0 = @poNum
+        LEFT JOIN LEWISB.FACILITY F    ON F.FCY_0 = P.POHFCY_0
+        WHERE P.POHNUM_0 = @poNum
       `);
 
     if (!result.recordset.length) return null;
@@ -1723,16 +1728,11 @@ class SageX3Adapter extends BaseERPAdapter {
       .query(`
         SELECT
           L.ITMREF_0    AS product_code,
-          L.ITMDES1_0   AS description,
-          L.QTYUOM_0    AS ordered_qty,
-          L.RCPQTY_0    AS received_qty,
-          (L.QTYUOM_0 - L.RCPQTY_0) AS pending_qty,
-          L.SAU_0       AS unit,
-          L.GROPRI_0    AS unit_price,
-          (L.QTYUOM_0 * L.GROPRI_0) AS line_total,
-          L.EXTDLVDAT_0 AS expected_date
+          I.ITMDES1_0   AS description,
+          L.QTYUOM_0    AS ordered_qty
         FROM tbs.LEWISB.PORDERQ L
-        WHERE L.PSHNUM_0 = @poNum2
+        LEFT JOIN LEWISB.ITMMASTER I ON I.ITMREF_0 = L.ITMREF_0
+        WHERE L.POHNUM_0 = @poNum2
       `);
 
     po.lines = lineResult.recordset;
