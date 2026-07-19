@@ -31,6 +31,51 @@ exports.getSuppliers = async (req, res) => {
   }
 };
 
+exports.debugBlobSizes = async (req, res) => {
+  try {
+    const ERPFactoryLocal = require("../erp/erp.factory");
+    const adapter = await ERPFactoryLocal.getERPAdapterForUser(req.user);
+    const pool = await adapter.poolPromise;
+    const sizeResult = await pool.request().query(`
+      SELECT
+        COUNT(*) AS row_count,
+        SUM(DATALENGTH(BLOB_0)) AS total_bytes,
+        AVG(DATALENGTH(BLOB_0)) AS avg_bytes,
+        MAX(DATALENGTH(BLOB_0)) AS max_bytes
+      FROM LEWISB.CBLOB WHERE CODBLB_0='ITM'
+    `);
+
+    const t0 = Date.now();
+    await pool.request().query(`
+      SELECT D.PROD_CODE, D.CATEGORY, D.PROD_DESC, D.UOM, D.SITE, 10 AS BASE_PRICE
+      FROM (
+        SELECT DISTINCT I.ITMREF_0 AS PROD_CODE, I.TCLCOD_0 AS CATEGORY, I.ITMDES1_0 AS PROD_DESC, I.STU_0 AS UOM, F.STOFCY_0 AS SITE
+        FROM LEWISB.ITMMASTER I
+        INNER JOIN LEWISB.ITMFACILIT F ON I.ITMREF_0 = F.ITMREF_0
+        WHERE 1=1
+      ) D
+    `);
+    const noBlobMs = Date.now() - t0;
+
+    const t1 = Date.now();
+    await pool.request().query(`
+      SELECT D.PROD_CODE, D.CATEGORY, D.PROD_DESC, C.BLOB_0 AS PROD_IMG, D.UOM, D.SITE, 10 AS BASE_PRICE
+      FROM (
+        SELECT DISTINCT I.ITMREF_0 AS PROD_CODE, I.TCLCOD_0 AS CATEGORY, I.ITMDES1_0 AS PROD_DESC, I.STU_0 AS UOM, F.STOFCY_0 AS SITE
+        FROM LEWISB.ITMMASTER I
+        INNER JOIN LEWISB.ITMFACILIT F ON I.ITMREF_0 = F.ITMREF_0
+        WHERE 1=1
+      ) D
+      LEFT JOIN LEWISB.CBLOB C ON D.PROD_CODE = C.IDENT1_0 AND C.CODBLB_0 = 'ITM'
+    `);
+    const withBlobMs = Date.now() - t1;
+
+    res.json({ success: true, sizeResult: sizeResult.recordset[0], noBlobMs, withBlobMs });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 exports.debugProductsFull2 = async (req, res) => {
   const timings = {};
   const mark = async (label, fn) => {
