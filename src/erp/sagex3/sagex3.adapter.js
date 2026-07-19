@@ -160,52 +160,37 @@ class SageX3Adapter extends BaseERPAdapter {
     const request =
       pool.request();
 
-    // NOTE: DISTINCT is computed in the inner subquery over small
-    // text/varchar columns only. CBLOB.BLOB_0 (raw product image binary)
-    // is joined AFTER dedup so SQL Server never has to binary-compare
-    // BLOB content to determine distinctness -- doing that over the
-    // ITMMASTER x ITMFACILIT join was taking 20+ seconds even on a
-    // small (~3800 row) table. This produces identical rows/columns,
-    // just without the DISTINCT-over-BLOB performance trap.
+    // NOTE: product images (CBLOB.BLOB_0) are fetched with a SEPARATE
+    // query below and merged in JS, instead of being LEFT JOINed here.
+    // On this tenant's SQL Server, joining CBLOB directly into the
+    // ITMMASTER x ITMFACILIT list turned a ~150ms query into a 30+
+    // second one (no usable index on CBLOB for this join), even though
+    // the underlying blob data itself is small (~18MB / 514 images).
+    // Fetching CBLOB on its own and joining by PROD_CODE in memory
+    // avoids that bad query plan entirely.
     let query = `
 
-      SELECT
+      SELECT DISTINCT
 
-        D.PROD_CODE,
+        I.ITMREF_0 AS PROD_CODE,
 
-        D.CATEGORY,
+        I.TCLCOD_0 AS CATEGORY,
 
-        D.PROD_DESC,
+        I.ITMDES1_0 AS PROD_DESC,
 
-        C.BLOB_0 AS PROD_IMG,
+        I.STU_0 AS UOM,
 
-        D.UOM,
-
-        D.SITE,
+        F.STOFCY_0 AS SITE,
 
         10 AS BASE_PRICE
 
-      FROM (
+      FROM LEWISB.ITMMASTER I
 
-        SELECT DISTINCT
+      INNER JOIN LEWISB.ITMFACILIT F
 
-          I.ITMREF_0 AS PROD_CODE,
+        ON I.ITMREF_0 = F.ITMREF_0
 
-          I.TCLCOD_0 AS CATEGORY,
-
-          I.ITMDES1_0 AS PROD_DESC,
-
-          I.STU_0 AS UOM,
-
-          F.STOFCY_0 AS SITE
-
-        FROM LEWISB.ITMMASTER I
-
-        INNER JOIN LEWISB.ITMFACILIT F
-
-          ON I.ITMREF_0 = F.ITMREF_0
-
-        WHERE 1=1
+      WHERE 1=1
     `;
 
     if (filters.category) {
@@ -243,17 +228,6 @@ class SageX3Adapter extends BaseERPAdapter {
       `;
     }
 
-    query += `
-
-      ) D
-
-      LEFT JOIN LEWISB.CBLOB C
-
-        ON D.PROD_CODE = C.IDENT1_0
-
-        AND C.CODBLB_0 = 'ITM'
-    `;
-
     console.time("GET_PRODUCTS");
 
     const result =
@@ -261,7 +235,23 @@ class SageX3Adapter extends BaseERPAdapter {
 
     console.timeEnd("GET_PRODUCTS");
 
-    return result.recordset;
+    console.time("GET_PRODUCT_IMAGES");
+
+    const blobResult = await pool.request().query(`
+      SELECT IDENT1_0, BLOB_0 FROM LEWISB.CBLOB WHERE CODBLB_0 = 'ITM'
+    `);
+
+    console.timeEnd("GET_PRODUCT_IMAGES");
+
+    const imageMap = new Map();
+    for (const row of blobResult.recordset) {
+      imageMap.set(row.IDENT1_0, row.BLOB_0);
+    }
+
+    return result.recordset.map(row => ({
+      ...row,
+      PROD_IMG: imageMap.get(row.PROD_CODE) ?? null
+    }));
   }
 
   async getProducts_2(filters = {}) {
