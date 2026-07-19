@@ -11,7 +11,7 @@ exports.getAdminStats = async (user) => {
   const tenant_id = user?.tenant_id;
 
   const [
-    usersTotal, usersActive, usersByRole,
+    usersTotal, usersActive, usersByRole, adminCount,
     modules, roles, roleModules,
     ordersTotal, ordersToday, ordersPending, ordersByStatus,
     newSignups7d, pendingVerification, pendingApproval,
@@ -25,6 +25,18 @@ exports.getAdminStats = async (user) => {
               JOIN user_roles ur ON u.user_id=ur.user_id
               JOIN roles r ON ur.role_id=r.role_id
               WHERE u.tenant_id=$1 GROUP BY r.role_name`, [tenant_id]),
+    // Counted separately (not read off usersByRole/by_role) because the
+    // admin role's role_name text isn't a fixed string — assignAdmin()
+    // matches it fuzzily (LOWER(role_name) LIKE '%admin%') since each tenant
+    // can have its own role_name spelling/casing. The dashboard used to key
+    // off an exact "Administrator" string match, which silently showed 0
+    // admins for any tenant whose admin role wasn't spelled exactly that way,
+    // even with real admins assigned.
+    db.query(`SELECT COUNT(DISTINCT u.user_id) AS count
+              FROM users u
+              JOIN user_roles ur ON u.user_id=ur.user_id
+              JOIN roles r ON ur.role_id=r.role_id
+              WHERE u.tenant_id=$1 AND LOWER(r.role_name) LIKE '%admin%'`, [tenant_id]),
     db.query(`SELECT COUNT(*) AS total, COUNT(*) FILTER(WHERE is_active=true) AS active FROM modules`),
     db.query(`SELECT COUNT(*) AS total, COUNT(*) FILTER(WHERE is_active=true) AS active FROM roles`),
     db.query("SELECT COUNT(*) FROM role_modules"),
@@ -100,6 +112,7 @@ exports.getAdminStats = async (user) => {
       total:   Number(usersTotal.rows[0].count),
       active:  Number(usersActive.rows[0].count),
       by_role: Object.fromEntries(usersByRole.rows.map(r => [r.role, Number(r.count)])),
+      admin_count: Number(adminCount.rows[0].count),
       new_this_week: Number(newSignups7d.rows[0].count),
     },
     modules:     { total: Number(modules.rows[0].total), active: Number(modules.rows[0].active) },
