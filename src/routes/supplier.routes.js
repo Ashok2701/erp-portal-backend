@@ -20,4 +20,10 @@ router.post ("/purchase-orders/:poNumber/invoice", auth, uploadInvoice.single("i
 router.get  ("/consignment",  auth, ctrl.getSupplierConsignment);
 router.get  ("/dashboard",    auth, ctrl.getSupplierDashboard);
 
+// TEMP diagnostic: list real Sage X3 column names for a table, to stop
+// guessing column-by-column after repeated "Invalid column name" errors
+// on PORDER (RCPSTA_0, INVSTA_0, PSHSTA_0 so far). Remove once the
+// PORDER queries are fully aligned to this tenant's actual schema.
+router.get  ("/_debug/columns/:tableName", auth, ctrl.debugListColumns);
+
 module.exports = router;

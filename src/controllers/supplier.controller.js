@@ -235,3 +235,28 @@ exports.getSupplierDashboard = async (req, res) => {
     res.status(500).json({ success: false, message: err.message });
   }
 };
+
+// TEMP diagnostic: list the real Sage X3 column names for a given table
+// in the LEWISB schema, so PORDER-related queries can be aligned to this
+// tenant's actual schema instead of guessing column names one at a time
+// after repeated "Invalid column name" errors (RCPSTA_0, INVSTA_0,
+// PSHSTA_0 so far). Remove this route + handler once that's done.
+exports.debugListColumns = async (req, res) => {
+  try {
+    const { sql } = require("mssql");
+    const factory = require("../erp/erp.factory");
+    const adapter = await factory.getERPAdapterForUser(req.user);
+    const pool = await adapter.poolPromise;
+    const result = await pool.request()
+      .input("tableName", sql.NVarChar, req.params.tableName)
+      .query(`
+        SELECT COLUMN_NAME, DATA_TYPE, ORDINAL_POSITION
+        FROM tbs.INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = 'LEWISB' AND TABLE_NAME = @tableName
+        ORDER BY ORDINAL_POSITION
+      `);
+    res.json({ success: true, columns: result.recordset });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
