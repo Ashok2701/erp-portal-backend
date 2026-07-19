@@ -1,6 +1,45 @@
 const erpService = require("../services/erp.service");
 const ERPFactory = require("../erp/erp.factory");
 
+exports.debugProductsFull = async (req, res) => {
+  const timings = {};
+  const mark = async (label, fn) => {
+    const t0 = Date.now();
+    try {
+      const r = await fn();
+      timings[label] = Date.now() - t0;
+      return r;
+    } catch (e) {
+      timings[label] = Date.now() - t0;
+      timings[label + "_error"] = e.message;
+      throw e;
+    }
+  };
+  try {
+    const UserModel = require("../models/user.model");
+    const userInfo = await mark("getUserById", () => UserModel.getUserById(req.user.user_id || req.user.id));
+    const userSite = userInfo[0]?.allowedsite || null;
+    const sitesParam = req.query.sites
+      ? req.query.sites.split(",").map(s => s.trim())
+      : (userSite ? [userSite] : []);
+    const filters = {
+      customer: req.query.customer || null,
+      sites: sitesParam,
+      category: req.query.category || null,
+      quantity: Number(req.query.quantity || 1)
+    };
+
+    const ERPFactoryLocal = require("../erp/erp.factory");
+    const adapter = await mark("getAdapter", () => ERPFactoryLocal.getERPAdapterForUser(req.user));
+    const products = await mark("getProducts", () => adapter.getProducts(filters));
+    const priceLists = await mark("getPriceLists", () => adapter.getPriceLists(filters));
+
+    res.json({ success: true, timings, filters, productCount: products.length, priceListCount: priceLists.length });
+  } catch (err) {
+    res.status(500).json({ success: false, timings, message: err.message });
+  }
+};
+
 exports.debugProductCounts = async (req, res) => {
   try {
     const adapter = await ERPFactory.getERPAdapterForUser(req.user);
