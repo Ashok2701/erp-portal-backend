@@ -199,7 +199,8 @@ exports.getMe = async (req, res) => {
     });
   } catch (err) {
     console.error("GET ME ERROR:", err);
-    res.status(500).json({ message: "Failed to load user info" });
+    // TEMP: surface err.message for live diagnosis, revert once root-caused
+    res.status(500).json({ message: "Failed to load user info", _debug: err.message });
   }
 };
 
