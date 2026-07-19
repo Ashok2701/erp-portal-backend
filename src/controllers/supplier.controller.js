@@ -243,7 +243,7 @@ exports.getSupplierDashboard = async (req, res) => {
 // PSHSTA_0 so far). Remove this route + handler once that's done.
 exports.debugListColumns = async (req, res) => {
   try {
-    const { sql } = require("mssql");
+    const sql = require("mssql");
     const factory = require("../erp/erp.factory");
     const adapter = await factory.getERPAdapterForUser(req.user);
     const pool = await adapter.poolPromise;
