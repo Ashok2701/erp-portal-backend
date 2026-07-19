@@ -160,37 +160,52 @@ class SageX3Adapter extends BaseERPAdapter {
     const request =
       pool.request();
 
+    // NOTE: DISTINCT is computed in the inner subquery over small
+    // text/varchar columns only. CBLOB.BLOB_0 (raw product image binary)
+    // is joined AFTER dedup so SQL Server never has to binary-compare
+    // BLOB content to determine distinctness -- doing that over the
+    // ITMMASTER x ITMFACILIT join was taking 20+ seconds even on a
+    // small (~3800 row) table. This produces identical rows/columns,
+    // just without the DISTINCT-over-BLOB performance trap.
     let query = `
 
-      SELECT DISTINCT
+      SELECT
 
-        I.ITMREF_0 AS PROD_CODE,
+        D.PROD_CODE,
 
-        I.TCLCOD_0 AS CATEGORY,
+        D.CATEGORY,
 
-        I.ITMDES1_0 AS PROD_DESC,
+        D.PROD_DESC,
 
         C.BLOB_0 AS PROD_IMG,
 
-        I.STU_0 AS UOM,
+        D.UOM,
 
-        F.STOFCY_0 AS SITE,
+        D.SITE,
 
         10 AS BASE_PRICE
 
-      FROM LEWISB.ITMMASTER I
+      FROM (
 
-      LEFT JOIN LEWISB.CBLOB C
+        SELECT DISTINCT
 
-        ON I.ITMREF_0 = C.IDENT1_0
+          I.ITMREF_0 AS PROD_CODE,
 
-        AND C.CODBLB_0 = 'ITM'
+          I.TCLCOD_0 AS CATEGORY,
 
-      INNER JOIN LEWISB.ITMFACILIT F
+          I.ITMDES1_0 AS PROD_DESC,
 
-        ON I.ITMREF_0 = F.ITMREF_0
+          I.STU_0 AS UOM,
 
-      WHERE 1=1
+          F.STOFCY_0 AS SITE
+
+        FROM LEWISB.ITMMASTER I
+
+        INNER JOIN LEWISB.ITMFACILIT F
+
+          ON I.ITMREF_0 = F.ITMREF_0
+
+        WHERE 1=1
     `;
 
     if (filters.category) {
@@ -227,6 +242,17 @@ class SageX3Adapter extends BaseERPAdapter {
         AND F.STOFCY_0 IN (${siteParams.join(",")})
       `;
     }
+
+    query += `
+
+      ) D
+
+      LEFT JOIN LEWISB.CBLOB C
+
+        ON D.PROD_CODE = C.IDENT1_0
+
+        AND C.CODBLB_0 = 'ITM'
+    `;
 
     console.time("GET_PRODUCTS");
 
