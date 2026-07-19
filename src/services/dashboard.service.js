@@ -260,14 +260,15 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
         [uid]
       )),
       // Unsigned legal documents
-      // NOTE: $1 and $2 both carry the same `uid` value -- kept as two
-      // separate parameter positions because Postgres resolves a single
-      // type per parameter *position* for the whole statement. Reusing
-      // one placeholder for both a text comparison (content_targets.target_value,
-      // varchar) and a uuid comparison (user_roles/user_signed_documents.user_id,
-      // uuid) made the two explicit ::text/::uuid casts fight over the same
-      // position, and depending on resolution order one side broke with
-      // "operator does not exist: character varying = uuid" or "uuid = text".
+      // NOTE: user_roles.user_id and user_signed_documents.user_id are both
+      // varchar (like every other user_id column in this app -- ids are
+      // JS-generated uuidv4 strings stored in varchar columns, not native
+      // Postgres uuid columns), so $1 (bare, no cast) works for all three
+      // comparisons here. Only role_id is a genuine uuid column, which is
+      // why it needs the ::text cast on the *column* side (role_id::text)
+      // to compare against target_value (varchar) -- confirmed via the pg
+      // error's character `position`, which pinpointed a stray ::uuid cast
+      // previously added on usd.user_id as the actual failure.
       tagged("unsignedDocs", `SELECT c.id AS content_id, c.title, ld.id AS legal_doc_id
          FROM content c
          JOIN legal_documents ld ON ld.id::text=c.legal_document_id::text
@@ -276,12 +277,12 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
            SELECT 1 FROM content_targets ct
            WHERE ct.content_id=c.id
            AND (ct.target_value=$1::text
-                OR ct.target_value=(SELECT role_id::text FROM user_roles WHERE user_id=$2::uuid LIMIT 1)
+                OR ct.target_value=(SELECT role_id::text FROM user_roles WHERE user_id=$1 LIMIT 1)
                 OR ct.target_type='ALL')
          )
          AND NOT EXISTS (
            SELECT 1 FROM user_signed_documents usd
-           WHERE usd.user_id=$2::uuid AND usd.legal_document_id=ld.id
+           WHERE usd.user_id=$1 AND usd.legal_document_id=ld.id
          )
          LIMIT 5`, db.query(
         `SELECT c.id AS content_id, c.title, ld.id AS legal_doc_id
@@ -292,15 +293,15 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
            SELECT 1 FROM content_targets ct
            WHERE ct.content_id=c.id
            AND (ct.target_value=$1::text
-                OR ct.target_value=(SELECT role_id::text FROM user_roles WHERE user_id=$2::uuid LIMIT 1)
+                OR ct.target_value=(SELECT role_id::text FROM user_roles WHERE user_id=$1 LIMIT 1)
                 OR ct.target_type='ALL')
          )
          AND NOT EXISTS (
            SELECT 1 FROM user_signed_documents usd
-           WHERE usd.user_id=$2::uuid AND usd.legal_document_id=ld.id
+           WHERE usd.user_id=$1 AND usd.legal_document_id=ld.id
          )
          LIMIT 5`,
-        [uid, uid]
+        [uid]
       )),
       // Unread content (see NOTE above re: two params for the same uid value)
       tagged("unreadContent", `SELECT c.id, c.title, c.type, c.message, c.priority, c.created_at
@@ -308,7 +309,7 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
          JOIN content_targets ct ON ct.content_id=c.id
          WHERE c.type IN ('OFFER','ANNOUNCEMENT','MESSAGE')
          AND (ct.target_value=$1::text OR ct.target_type='ALL'
-              OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$2::uuid))
+              OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$1))
          AND c.created_at >= NOW() - INTERVAL '30 days'
          ORDER BY c.created_at DESC LIMIT 8`, db.query(
         `SELECT c.id, c.title, c.type, c.message, c.priority, c.created_at
@@ -316,10 +317,10 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
          JOIN content_targets ct ON ct.content_id=c.id
          WHERE c.type IN ('OFFER','ANNOUNCEMENT','MESSAGE')
          AND (ct.target_value=$1::text OR ct.target_type='ALL'
-              OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$2::uuid))
+              OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$1))
          AND c.created_at >= NOW() - INTERVAL '30 days'
          ORDER BY c.created_at DESC LIMIT 8`,
-        [uid, uid]
+        [uid]
       )),
       // Account status
       tagged("approvalStatus", `SELECT status FROM users WHERE user_id=$1`, db.query(
