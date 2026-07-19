@@ -130,14 +130,13 @@ exports.login = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const { user_id, tenant_id, username, role, status,
-            portal_mode, is_super_admin, system_role } = req.user;
+            portal_mode, is_super_admin, system_role, tenant_slug } = req.user;
 
     const roles = await RoleModel.getRolesByUserId(user_id);
 
     const userResult = await db.query(
       `SELECT u.allowedsite, u.erp_entity_type, u.erp_entity_code,
               u.full_name, u.email, u.system_role, u.default_role,
-              u.tenant_slug,
               pu.partner_id,
               p.partner_name, p.slug  AS partner_slug,
               p.plan         AS partner_plan,
@@ -175,7 +174,11 @@ exports.getMe = async (req, res) => {
     res.json({
       user_id,
       tenant_id,
-      tenant_slug:       extra.tenant_slug,
+      // tenant_slug isn't a users column -- it comes from the tenants table,
+      // already resolved once by auth.middleware.js's JOIN and attached to
+      // req.user. The query above previously (wrongly) selected u.tenant_slug
+      // directly, which doesn't exist and made every /auth/me call 500.
+      tenant_slug:       tenant_slug,
       username,
       full_name:         extra.full_name,
       email:             extra.email,
@@ -199,8 +202,7 @@ exports.getMe = async (req, res) => {
     });
   } catch (err) {
     console.error("GET ME ERROR:", err);
-    // TEMP: surface err.message for live diagnosis, revert once root-caused
-    res.status(500).json({ message: "Failed to load user info", _debug: err.message });
+    res.status(500).json({ message: "Failed to load user info" });
   }
 };
 
