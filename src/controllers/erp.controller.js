@@ -31,6 +31,24 @@ exports.getSuppliers = async (req, res) => {
   }
 };
 
+exports.debugBlobSeparate = async (req, res) => {
+  try {
+    const ERPFactoryLocal = require("../erp/erp.factory");
+    const adapter = await ERPFactoryLocal.getERPAdapterForUser(req.user);
+    const pool = await adapter.poolPromise;
+
+    const t0 = Date.now();
+    const blobResult = await pool.request().query(`
+      SELECT IDENT1_0, BLOB_0 FROM LEWISB.CBLOB WHERE CODBLB_0='ITM'
+    `);
+    const blobFetchMs = Date.now() - t0;
+
+    res.json({ success: true, blobFetchMs, blobCount: blobResult.recordset.length });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
+
 exports.debugBlobSizes = async (req, res) => {
   try {
     const ERPFactoryLocal = require("../erp/erp.factory");

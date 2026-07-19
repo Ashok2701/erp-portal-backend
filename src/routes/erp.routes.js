@@ -11,6 +11,7 @@ router.get("/products", auth, ctrl.getProducts);
 router.get("/product-categories", auth, ctrl.getProductCategories);
 router.get("/_debug/products-full2", auth, ctrl.debugProductsFull2);
 router.get("/_debug/blob-sizes", auth, ctrl.debugBlobSizes);
+router.get("/_debug/blob-separate", auth, ctrl.debugBlobSeparate);
 
  router.get("/customers/:customerCode/addresses", auth, ctrl.getCustomerAddresses);
 router.get("/customers/:customerCode/detail",    auth, ctrl.getCustomerDetail);
