@@ -160,14 +160,25 @@ class SageX3Adapter extends BaseERPAdapter {
     const request =
       pool.request();
 
-    // NOTE: product images (CBLOB.BLOB_0) are fetched with a SEPARATE
-    // query below and merged in JS, instead of being LEFT JOINed here.
-    // On this tenant's SQL Server, joining CBLOB directly into the
-    // ITMMASTER x ITMFACILIT list turned a ~150ms query into a 30+
-    // second one (no usable index on CBLOB for this join), even though
-    // the underlying blob data itself is small (~18MB / 514 images).
-    // Fetching CBLOB on its own and joining by PROD_CODE in memory
-    // avoids that bad query plan entirely.
+    // NOTE: one row per product (PROD_CODE), not one row per
+    // product-per-site. The previous version joined ITMFACILIT and
+    // selected SITE, which multiplies each product into ~5-6 rows
+    // (one per site it's stocked at) -- SITE isn't used anywhere in
+    // the frontend or pricing engine, so those extra rows were pure
+    // duplication. Combined with attaching a full product image to
+    // every row, that duplication was inflating the response to
+    // hundreds of MB and causing the platform's proxy to kill the
+    // connection. Site filtering (when requested) is still applied,
+    // via EXISTS against ITMFACILIT, without SITE ever being selected.
+    //
+    // Product images (CBLOB.BLOB_0) are fetched with a SEPARATE query
+    // below and merged in JS as base64, instead of being LEFT JOINed
+    // here. On this tenant's SQL Server, joining CBLOB directly into
+    // the product list turned a ~150ms query into a 30+ second one (no
+    // usable index on CBLOB for this join), even though the underlying
+    // blob data itself is small (~18MB / 514 images). Fetching CBLOB
+    // on its own and joining by PROD_CODE in memory avoids that bad
+    // query plan entirely.
     let query = `
 
       SELECT DISTINCT
@@ -180,15 +191,9 @@ class SageX3Adapter extends BaseERPAdapter {
 
         I.STU_0 AS UOM,
 
-        F.STOFCY_0 AS SITE,
-
         10 AS BASE_PRICE
 
       FROM LEWISB.ITMMASTER I
-
-      INNER JOIN LEWISB.ITMFACILIT F
-
-        ON I.ITMREF_0 = F.ITMREF_0
 
       WHERE 1=1
     `;
@@ -224,7 +229,11 @@ class SageX3Adapter extends BaseERPAdapter {
       });
 
       query += `
-        AND F.STOFCY_0 IN (${siteParams.join(",")})
+        AND EXISTS (
+          SELECT 1 FROM LEWISB.ITMFACILIT F
+          WHERE F.ITMREF_0 = I.ITMREF_0
+          AND F.STOFCY_0 IN (${siteParams.join(",")})
+        )
       `;
     }
 
@@ -245,7 +254,11 @@ class SageX3Adapter extends BaseERPAdapter {
 
     const imageMap = new Map();
     for (const row of blobResult.recordset) {
-      imageMap.set(row.IDENT1_0, row.BLOB_0);
+      const raw = row.BLOB_0;
+      const base64 = raw
+        ? (Buffer.isBuffer(raw) ? raw.toString("base64") : raw)
+        : null;
+      imageMap.set(row.IDENT1_0, base64);
     }
 
     return result.recordset.map(row => ({
