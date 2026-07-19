@@ -206,8 +206,16 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
   // Each query is individually labeled so a failure identifies exactly
   // which query broke instead of a single opaque Promise.all rejection
   // (diagnostic aid added while tracking down a uuid/varchar cast bug).
-  const tagged = (label, promise) => promise.catch(e => {
-    e.message = `[${label}] ${e.message}`;
+  const tagged = (label, sqlText, promise) => promise.catch(e => {
+    // Postgres errors carry a 1-based character offset (e.position) into
+    // the query text pinpointing exactly which token/expression failed --
+    // far more precise than guessing from the error text alone.
+    let snippet = "";
+    if (e.position && sqlText) {
+      const p = Number(e.position);
+      snippet = ` | near: ...${sqlText.slice(Math.max(0, p - 40), p + 20).replace(/\s+/g, " ")}...`;
+    }
+    e.message = `[${label}] ${e.message}${snippet}`;
     throw e;
   });
 
@@ -215,14 +223,25 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
   try {
     [openReq, recentOrders, pipeline, unsignedDocs, unreadContent, approvalStatus] = await Promise.all([
       // Open requests: all not-yet-completed portal requests
-      tagged("openReq", db.query(
+      tagged("openReq", `SELECT COUNT(*) FROM sales_requests
+         WHERE user_id=$1
+         AND UPPER(status) IN ('CREATED','REQUEST_CREATED','DRAFT','PENDING')`, db.query(
         `SELECT COUNT(*) FROM sales_requests
          WHERE user_id=$1
          AND UPPER(status) IN ('CREATED','REQUEST_CREATED','DRAFT','PENDING')`,
         [uid]
       )),
       // Recent portal requests (last 10)
-      tagged("recentOrders", db.query(
+      tagged("recentOrders", `SELECT sr.drop_request_id AS request_no,
+                DATE(sr.request_date)  AS date,
+                (SELECT COUNT(*) FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id) AS products_count,
+                sr.status,
+                sr.erp_order_no AS so_number,
+                sr.request_date AS delivery_date,
+                sr.total_amount AS amount
+         FROM sales_requests sr
+         WHERE sr.user_id=$1
+         ORDER BY sr.request_date DESC LIMIT 10`, db.query(
         `SELECT sr.drop_request_id AS request_no,
                 DATE(sr.request_date)  AS date,
                 (SELECT COUNT(*) FROM sales_request_items sri WHERE sri.drop_request_id=sr.drop_request_id) AS products_count,
@@ -236,7 +255,7 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
         [uid]
       )),
       // Pipeline counts by status
-      tagged("pipeline", db.query(
+      tagged("pipeline", `SELECT status, COUNT(*) FROM sales_requests WHERE user_id=$1 GROUP BY status`, db.query(
         `SELECT status, COUNT(*) FROM sales_requests WHERE user_id=$1 GROUP BY status`,
         [uid]
       )),
@@ -249,7 +268,22 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
       // uuid) made the two explicit ::text/::uuid casts fight over the same
       // position, and depending on resolution order one side broke with
       // "operator does not exist: character varying = uuid" or "uuid = text".
-      tagged("unsignedDocs", db.query(
+      tagged("unsignedDocs", `SELECT c.id AS content_id, c.title, ld.id AS legal_doc_id
+         FROM content c
+         JOIN legal_documents ld ON ld.id::text=c.legal_document_id::text
+         WHERE c.type='DOCUMENT'
+         AND EXISTS (
+           SELECT 1 FROM content_targets ct
+           WHERE ct.content_id=c.id
+           AND (ct.target_value=$1::text
+                OR ct.target_value=(SELECT role_id::text FROM user_roles WHERE user_id=$2::uuid LIMIT 1)
+                OR ct.target_type='ALL')
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM user_signed_documents usd
+           WHERE usd.user_id=$2::uuid AND usd.legal_document_id=ld.id
+         )
+         LIMIT 5`, db.query(
         `SELECT c.id AS content_id, c.title, ld.id AS legal_doc_id
          FROM content c
          JOIN legal_documents ld ON ld.id::text=c.legal_document_id::text
@@ -269,7 +303,14 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
         [uid, uid]
       )),
       // Unread content (see NOTE above re: two params for the same uid value)
-      tagged("unreadContent", db.query(
+      tagged("unreadContent", `SELECT c.id, c.title, c.type, c.message, c.priority, c.created_at
+         FROM content c
+         JOIN content_targets ct ON ct.content_id=c.id
+         WHERE c.type IN ('OFFER','ANNOUNCEMENT','MESSAGE')
+         AND (ct.target_value=$1::text OR ct.target_type='ALL'
+              OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$2::uuid))
+         AND c.created_at >= NOW() - INTERVAL '30 days'
+         ORDER BY c.created_at DESC LIMIT 8`, db.query(
         `SELECT c.id, c.title, c.type, c.message, c.priority, c.created_at
          FROM content c
          JOIN content_targets ct ON ct.content_id=c.id
@@ -281,7 +322,8 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
         [uid, uid]
       )),
       // Account status
-      tagged("approvalStatus", db.query(`SELECT status FROM users WHERE user_id=$1`, [uid])),
+      tagged("approvalStatus", `SELECT status FROM users WHERE user_id=$1`, db.query(
+        `SELECT status FROM users WHERE user_id=$1`, [uid])),
     ]);
   } catch (qErr) {
     console.error("Dashboard portal query error:", qErr.message);
