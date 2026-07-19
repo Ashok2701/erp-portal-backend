@@ -1,4 +1,26 @@
 const erpService = require("../services/erp.service");
+const ERPFactory = require("../erp/erp.factory");
+
+exports.debugProductCounts = async (req, res) => {
+  try {
+    const adapter = await ERPFactory.getERPAdapterForUser(req.user);
+    const pool = await adapter.poolPromise;
+    const q = async (sqlText) => {
+      const r = await pool.request().query(sqlText);
+      return r.recordset[0];
+    };
+    const itmmaster = await q("SELECT COUNT(*) AS c FROM LEWISB.ITMMASTER");
+    const itmfacilit = await q("SELECT COUNT(*) AS c FROM LEWISB.ITMFACILIT");
+    const cblob = await q("SELECT COUNT(*) AS c FROM LEWISB.CBLOB WHERE CODBLB_0='ITM'");
+    const joined = await q(`
+      SELECT COUNT(*) AS c FROM LEWISB.ITMMASTER I
+      INNER JOIN LEWISB.ITMFACILIT F ON I.ITMREF_0 = F.ITMREF_0
+    `);
+    res.json({ success: true, itmmaster, itmfacilit, cblob, joined });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+};
 
 exports.getCustomers = async (req, res) => {
   try {

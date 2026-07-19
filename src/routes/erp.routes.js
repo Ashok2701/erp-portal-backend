@@ -9,6 +9,7 @@ router.get("/suppliers", auth, ctrl.getSuppliers);
 router.get("/dashboard", auth, ctrl.getDashboard);
 router.get("/products", auth, ctrl.getProducts);
 router.get("/product-categories", auth, ctrl.getProductCategories);
+router.get("/_debug/product-counts", auth, ctrl.debugProductCounts);
 
  router.get("/customers/:customerCode/addresses", auth, ctrl.getCustomerAddresses);
 router.get("/customers/:customerCode/detail",    auth, ctrl.getCustomerDetail);
