@@ -149,8 +149,8 @@ exports.getCustomerStats = async (user) => {
   const user_id = user?.user_id;
   const [ordersRes, revenueRes] = await Promise.all([
     db.query(`SELECT status, COUNT(*) as count FROM sales_requests
-              WHERE user_id=$1::uuid GROUP BY status`, [user_id]),
-    db.query(`SELECT COALESCE(SUM(total_amount),0) as total FROM sales_requests WHERE user_id=$1::uuid`, [user_id]),
+              WHERE user_id=$1 GROUP BY status`, [user_id]),
+    db.query(`SELECT COALESCE(SUM(total_amount),0) as total FROM sales_requests WHERE user_id=$1`, [user_id]),
   ]);
   const byStatus = {};
   for (const row of ordersRes.rows) byStatus[(row.status || "").toLowerCase()] = Number(row.count);
@@ -209,7 +209,7 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
       // Open requests: all not-yet-completed portal requests
       db.query(
         `SELECT COUNT(*) FROM sales_requests
-         WHERE user_id=$1::uuid
+         WHERE user_id=$1
          AND UPPER(status) IN ('CREATED','REQUEST_CREATED','DRAFT','PENDING')`,
         [uid]
       ),
@@ -223,13 +223,13 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
                 sr.request_date AS delivery_date,
                 sr.total_amount AS amount
          FROM sales_requests sr
-         WHERE sr.user_id=$1::uuid
+         WHERE sr.user_id=$1
          ORDER BY sr.request_date DESC LIMIT 10`,
         [uid]
       ),
       // Pipeline counts by status
       db.query(
-        `SELECT status, COUNT(*) FROM sales_requests WHERE user_id=$1::uuid GROUP BY status`,
+        `SELECT status, COUNT(*) FROM sales_requests WHERE user_id=$1 GROUP BY status`,
         [uid]
       ),
       // Unsigned legal documents
@@ -242,12 +242,12 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
            SELECT 1 FROM content_targets ct
            WHERE ct.content_id=c.id
            AND (ct.target_value=$1::text
-                OR ct.target_value=(SELECT role_id::text FROM user_roles WHERE user_id=$1::uuid LIMIT 1)
+                OR ct.target_value=(SELECT role_id::text FROM user_roles WHERE user_id=$1 LIMIT 1)
                 OR ct.target_type='ALL')
          )
          AND NOT EXISTS (
            SELECT 1 FROM user_signed_documents usd
-           WHERE usd.user_id=$1::uuid AND usd.legal_document_id=ld.id
+           WHERE usd.user_id=$1 AND usd.legal_document_id=ld.id
          )
          LIMIT 5`,
         [uid]
@@ -259,13 +259,13 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
          JOIN content_targets ct ON ct.content_id=c.id
          WHERE c.type IN ('OFFER','ANNOUNCEMENT','MESSAGE')
          AND (ct.target_value=$1::text OR ct.target_type='ALL'
-              OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$1::uuid))
+              OR ct.target_value IN (SELECT role_id::text FROM user_roles WHERE user_id=$1))
          AND c.created_at >= NOW() - INTERVAL '30 days'
          ORDER BY c.created_at DESC LIMIT 8`,
         [uid]
       ),
       // Account status
-      db.query(`SELECT status FROM users WHERE user_id=$1::uuid`, [uid]),
+      db.query(`SELECT status FROM users WHERE user_id=$1`, [uid]),
     ]);
   } catch (qErr) {
     console.error("Dashboard portal query error:", qErr.message);
@@ -374,11 +374,11 @@ exports.getCustomerDashboard = async ({ username, from, to, preset, user }) => {
     const toTs2   = `${dateTo}   23:59:59`;
     try {
       const [soFb, dispFb, delivFb, payFb, totFb] = await Promise.all([
-        db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND UPPER(status)='ORDER GENERATED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs2, toTs2]),
-        db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND UPPER(status)='DELIVERY SCHEDULED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs2, toTs2]),
-        db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1::uuid AND UPPER(status)='COMPLETED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs2, toTs2]),
-        db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1::uuid AND UPPER(status) IN ('CREATED','REQUEST_CREATED','DRAFT')`, [uid]),
-        db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1::uuid AND request_date BETWEEN $2 AND $3`, [uid, fromTs2, toTs2]),
+        db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1 AND UPPER(status)='ORDER GENERATED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs2, toTs2]),
+        db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1 AND UPPER(status)='DELIVERY SCHEDULED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs2, toTs2]),
+        db.query(`SELECT COUNT(*) FROM sales_requests WHERE user_id=$1 AND UPPER(status)='COMPLETED' AND request_date BETWEEN $2 AND $3`, [uid, fromTs2, toTs2]),
+        db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1 AND UPPER(status) IN ('CREATED','REQUEST_CREATED','DRAFT')`, [uid]),
+        db.query(`SELECT COALESCE(SUM(total_amount),0) AS total FROM sales_requests WHERE user_id=$1 AND request_date BETWEEN $2 AND $3`, [uid, fromTs2, toTs2]),
       ]);
       salesOrdersCount   = Number(soFb.rows[0].count   || 0);
       ordersInDispatch   = Number(dispFb.rows[0].count  || 0);
