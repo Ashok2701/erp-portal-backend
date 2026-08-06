@@ -42,6 +42,26 @@ if (process.env.NODE_ENV !== "production") {
 // ── Health check ─────────────────────────────────────────────
 app.get("/health", (_req, res) => res.json({ status: "ok", ts: new Date().toISOString() }));
 
+// ── system_config table (deployment mode + other platform settings) ──
+(async () => {
+  const db = require("./config/db");
+  try {
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS system_config (
+        key        VARCHAR(100) PRIMARY KEY,
+        value      TEXT,
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      INSERT INTO system_config (key, value)
+      VALUES ('deployment_mode', 'saas')
+      ON CONFLICT (key) DO NOTHING;
+    `);
+    logger.info("system_config table ready");
+  } catch (err) {
+    logger.error("system_config table error:", { message: err.message });
+  }
+})();
+
 // ── Auto-create supplier/consignment tables ───────────────────
 (async () => {
   const db = require("./config/db");
@@ -186,6 +206,11 @@ app.use("/sales-requests", require("./routes/salesRequest.routes"));
 
 // Other
 app.use("/purchase-requests", require("./routes/purchaseRequest.routes"));
+
+// Deployment mode (public GET, owner-only POST)
+const deploymentCtrl = require("./controllers/deploymentMode.controller");
+app.get ("/admin/deployment-mode", deploymentCtrl.getMode);
+app.post("/admin/deployment-mode", require("./middleware/auth.middleware"), deploymentCtrl.setMode);
 app.use("/supplier",          require("./routes/supplier.routes"));
 app.use("/cart",           require("./routes/cart.routes"));
 app.use("/profile",        require("./routes/profile.routes"));

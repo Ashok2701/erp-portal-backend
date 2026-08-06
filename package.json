@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "seed:onpremise": "node src/seeds/onpremise.seed.js",
+    "seed:reset": "node src/seeds/reset.seed.js"
   },
   "keywords": [],
   "author": "",

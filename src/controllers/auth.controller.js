@@ -7,6 +7,7 @@ const UserModel        = require("../models/user.model");
 const RoleModel        = require("../models/role.model");
 const ModuleModel      = require("../models/module.model");
 const PortalGrantModel = require("../models/portalGrant.model");
+const modeConfig       = require("../config/mode");
 
 // ── Helpers ───────────────────────────────────────────────────
 function resolvePartnerContext(user) {
@@ -97,8 +98,11 @@ exports.login = async (req, res) => {
   // Active portal ERP context
   const activePortalData = portals.find(p => p.portal_type === activePortal) || {};
 
+  const deploymentMode = await modeConfig.getDeploymentMode();
+
   res.json({
     token,
+    deployment_mode: deploymentMode,
     user: {
       user_id:           user.user_id,
       tenant_id:         user.tenant_id,
@@ -171,9 +175,11 @@ exports.getMe = async (req, res) => {
     const activePortalData = portals.find(p => p.portal_type === activePortal) || {};
     const partnerContext   = resolvePartnerContext(extra);
 
+    const deploymentMode = await modeConfig.getDeploymentMode();
     res.json({
       user_id,
       tenant_id,
+      deployment_mode: deploymentMode,
       // tenant_slug isn't a users column -- it comes from the tenants table,
       // already resolved once by auth.middleware.js's JOIN and attached to
       // req.user. The query above previously (wrongly) selected u.tenant_slug
