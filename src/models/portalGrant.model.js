@@ -57,9 +57,18 @@ exports.getByTenantId = async (tenantId) => {
  * Get active portal types for a tenant (just the strings)
  */
 exports.getActivePortalTypes = async (tenantId) => {
+  // Deterministic order (CUSTOMER, CONSIGNMENT, SUPPLIER) — without an ORDER BY,
+  // Postgres row order isn't guaranteed and shifts after UPDATEs (e.g. re-running
+  // the on-premise seed script), which previously made resolveDefaultPortal fall
+  // back to whichever portal happened to sort first instead of a stable choice.
   const r = await db.query(
     `SELECT portal_type FROM tenant_portal_grants
-     WHERE tenant_id = $1 AND is_active = true`,
+     WHERE tenant_id = $1 AND is_active = true
+     ORDER BY CASE portal_type
+       WHEN 'CUSTOMER' THEN 1
+       WHEN 'CONSIGNMENT' THEN 2
+       WHEN 'SUPPLIER' THEN 3
+       ELSE 4 END`,
     [tenantId]
   );
   return r.rows.map(row => row.portal_type);

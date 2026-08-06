@@ -82,7 +82,13 @@ exports.login = async (req, res) => {
   let portals      = [];
   let activePortal = null;
 
-  if (system_role === "tenant_user" && user.tenant_id) {
+  // is_super_admin (the on-premise / tenant Administrator console account) is not
+  // a portal end-user — Administrator satisfies every PORTAL_ROLES check in
+  // portalGrant.model.js, so without this guard they get handed CUSTOMER/
+  // CONSIGNMENT/SUPPLIER portal identity (with no ORDER BY, whichever the DB
+  // happens to return first) and the frontend renders them as if they were a
+  // logged-in Consignment/Customer/Supplier user instead of the admin console.
+  if (system_role === "tenant_user" && user.tenant_id && !user.is_super_admin) {
     portals      = await PortalGrantModel.getUserPortalAccess(user.user_id, user.tenant_id);
     activePortal = resolveDefaultPortal(portals, user.default_role);
   }
@@ -167,7 +173,7 @@ exports.getMe = async (req, res) => {
     // Portal access
     let portals      = [];
     let activePortal = null;
-    if (resolved_system_role === "tenant_user" && tenant_id) {
+    if (resolved_system_role === "tenant_user" && tenant_id && !is_super_admin) {
       portals      = await PortalGrantModel.getUserPortalAccess(user_id, tenant_id);
       activePortal = resolveDefaultPortal(portals, extra.default_role);
     }
