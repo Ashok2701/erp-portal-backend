@@ -28,6 +28,27 @@ async function verifyPartnerAccess(req, tenantId) {
   return t.rows.length > 0;
 }
 
+// A handful of routes take a userId instead of a tenantId (reset password,
+// toggle active, ERP mapping) and previously did zero scoping — any caller
+// that passed superadmin.middleware (which only checks is_super_admin/
+// owner/partner_user, not tenant) could reset any user's password or read
+// any user's ERP mapping on the whole platform. This resolves the target
+// user's tenant and re-uses the same partner/tenant scoping rules above.
+async function verifyUserAccess(req, targetUserId) {
+  const { system_role, is_super_admin, tenant_id } = req.user;
+  if (system_role === 'owner') return true;
+
+  const u = await db.query('SELECT tenant_id FROM users WHERE user_id=$1', [targetUserId]);
+  if (!u.rows.length) return false;
+  const targetTenantId = u.rows[0].tenant_id;
+
+  if (system_role === 'partner_user') return verifyPartnerAccess(req, targetTenantId);
+  if (system_role === 'tenant_user')  return tenant_id === targetTenantId;
+
+  // Legacy is_super_admin rows with no tenant_id (true platform admin).
+  return !!is_super_admin && !tenant_id;
+}
+
 exports.listTenants = async (req, res) => {
   try {
     const { system_role, user_id } = req.user;
@@ -53,6 +74,23 @@ exports.listTenants = async (req, res) => {
         WHERE t.partner_id = $1
         ORDER BY t.created_at ASC`;
       params = [pu.rows[0].partner_id];
+    } else if (system_role === "tenant_user") {
+      // On-premise / tenant-scoped Administrator: this endpoint is the SaaS
+      // multi-tenant management list. is_super_admin alone used to fall
+      // through to the "owner sees all" branch below, which handed an
+      // on-premise customer's local admin every OTHER tenant on this
+      // platform (including ERP host/SMTP host/X3 URL). Scope them to
+      // exactly their own tenant.
+      query = `
+        SELECT t.*,
+          (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.tenant_id) AS user_count,
+          ts.erp_system, ts.erp_db_host, ts.erp_db_name,
+          ts.smtp_host, ts.x3_soap_url, ts.spaces_folder
+        FROM tenants t
+        LEFT JOIN tenant_settings ts ON ts.tenant_id = t.tenant_id
+        WHERE t.tenant_id = $1
+        ORDER BY t.created_at ASC`;
+      params = [req.user.tenant_id];
     } else {
       // Owner sees all tenants
       query = `
@@ -81,6 +119,15 @@ exports.getTenant = async (req, res) => {
     if (req.user.system_role === 'partner_user') {
       const allowed = await verifyPartnerAccess(req, id);
       if (!allowed) return res.status(403).json({ success: false, message: 'Access denied — tenant not under your partner account' });
+    } else if (req.user.system_role === 'tenant_user' && req.user.tenant_id !== id) {
+      // On-premise / tenant-scoped Administrator accounts (is_super_admin=true
+      // but system_role='tenant_user') used to sail through this whole
+      // controller for ANY tenant_id -- superadmin.middleware.js only checks
+      // is_super_admin, not tenant scope, so an on-premise customer's local
+      // admin could read/edit every OTHER tenant's ERP/X3/SMTP credentials and
+      // users via these same SaaS-superadmin-shaped endpoints. Restrict them to
+      // their own tenant, mirroring the partner_user check above.
+      return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
     const t = await db.query("SELECT * FROM tenants WHERE tenant_id=$1", [id]);
@@ -108,6 +155,12 @@ exports.createTenant = async (req, res) => {
 
     const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, "");
     const { system_role } = req.user;
+
+    // On-premise / tenant-scoped Administrators manage exactly one tenant
+    // (their own deployment) and have no legitimate reason to create
+    // another one via this SaaS-only endpoint.
+    if (system_role === "tenant_user")
+      return res.status(403).json({ success: false, message: "Access denied" });
 
     // Partner users can only create tenants under their own partner
     let resolvedPartnerId = partner_id || null;
@@ -150,6 +203,8 @@ exports.updateTenant = async (req, res) => {
     if (req.user.system_role === 'partner_user') {
       const allowed = await verifyPartnerAccess(req, id);
       if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.system_role === 'tenant_user' && req.user.tenant_id !== id) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
     }
     const { name, plan, is_active } = req.body;
 
@@ -177,6 +232,8 @@ exports.upsertSettings = async (req, res) => {
     if (req.user.system_role === 'partner_user') {
       const allowed = await verifyPartnerAccess(req, id);
       if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.system_role === 'tenant_user' && req.user.tenant_id !== id) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
     // Don't overwrite passwords if masked value sent
@@ -214,6 +271,8 @@ exports.getTenantUsers = async (req, res) => {
     if (req.user.system_role === 'partner_user') {
       const allowed = await verifyPartnerAccess(req, id);
       if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.system_role === 'tenant_user' && req.user.tenant_id !== id) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
     }
     const result = await db.query(
       `SELECT u.user_id, u.username, u.full_name, u.email,
@@ -249,6 +308,8 @@ exports.assignAdmin = async (req, res) => {
     if (req.user.system_role === 'partner_user') {
       const allowed = await verifyPartnerAccess(req, id);
       if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.system_role === 'tenant_user' && req.user.tenant_id !== id) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
     // Get Administrator role for this tenant
@@ -276,6 +337,8 @@ exports.testConnection = async (req, res) => {
     if (req.user.system_role === 'partner_user') {
       const allowed = await verifyPartnerAccess(req, id);
       if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.system_role === 'tenant_user' && req.user.tenant_id !== id) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
     }
     const settings = await TenantSettingsModel.getTenantSettings(id);
     ERPFactory.clearAdapterCache(id);
@@ -295,6 +358,8 @@ exports.createTenantUser = async (req, res) => {
     if (req.user.system_role === 'partner_user') {
       const allowed = await verifyPartnerAccess(req, tenantId);
       if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.system_role === 'tenant_user' && req.user.tenant_id !== tenantId) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
     const {
@@ -473,6 +538,8 @@ exports.repairTenantRoles = async (req, res) => {
     if (req.user.system_role === 'partner_user') {
       const allowed = await verifyPartnerAccess(req, tenantId);
       if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.system_role === 'tenant_user' && req.user.tenant_id !== tenantId) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
     // 1. Ensure tenant-scoped default roles exist (tenant-unique role_code)
@@ -568,6 +635,9 @@ exports.repairTenantRoles = async (req, res) => {
 exports.resetTenantUserPassword = async (req, res) => {
   try {
     const { userId } = req.params;
+    if (!(await verifyUserAccess(req, userId)))
+      return res.status(403).json({ success: false, message: 'Access denied' });
+
     const { password } = req.body;
     if (!password || password.length < 8)
       return res.status(400).json({ success: false, message: 'Password must be at least 8 characters' });
@@ -587,6 +657,9 @@ exports.resetTenantUserPassword = async (req, res) => {
 exports.toggleTenantUser = async (req, res) => {
   try {
     const { userId } = req.params;
+    if (!(await verifyUserAccess(req, userId)))
+      return res.status(403).json({ success: false, message: 'Access denied' });
+
     const { is_active } = req.body;
     await db.query('UPDATE users SET is_active=$1 WHERE user_id=$2', [is_active, userId]);
     res.json({ success: true });
@@ -604,6 +677,8 @@ exports.getTenantSetupStatus = async (req, res) => {
     if (req.user.system_role === 'partner_user') {
       const allowed = await verifyPartnerAccess(req, id);
       if (!allowed) return res.status(403).json({ success: false, message: 'Access denied' });
+    } else if (req.user.system_role === 'tenant_user' && req.user.tenant_id !== id) {
+      return res.status(403).json({ success: false, message: 'Access denied' });
     }
 
     const TenantSettingsModel = require('../models/tenantSettings.model');
@@ -751,6 +826,8 @@ exports.getPortalGrants = async (req, res) => {
     if (req.user.system_role === "partner_user") {
       const ok = await verifyPartnerAccess(req, tenantId);
       if (!ok) return res.status(403).json({ success: false, message: "Access denied" });
+    } else if (req.user.system_role === "tenant_user" && req.user.tenant_id !== tenantId) {
+      return res.status(403).json({ success: false, message: "Access denied" });
     }
     const grants = await PortalGrantModel.getByTenantId(tenantId);
     res.json({ success: true, data: grants });
@@ -776,6 +853,8 @@ exports.setPortalGrants = async (req, res) => {
     if (req.user.system_role === "partner_user") {
       const ok = await verifyPartnerAccess(req, tenantId);
       if (!ok) return res.status(403).json({ success: false, message: "Access denied" });
+    } else if (req.user.system_role === "tenant_user" && req.user.tenant_id !== tenantId) {
+      return res.status(403).json({ success: false, message: "Access denied" });
     }
 
     // First deactivate all existing grants for this tenant
@@ -799,6 +878,9 @@ exports.setPortalGrants = async (req, res) => {
 exports.getUserErpMappings = async (req, res) => {
   try {
     const { userId } = req.params;
+    if (!(await verifyUserAccess(req, userId)))
+      return res.status(403).json({ success: false, message: 'Access denied' });
+
     const r = await db.query(
       `SELECT * FROM user_role_erp_mapping WHERE user_id = $1 ORDER BY portal_type`,
       [userId]
@@ -812,6 +894,9 @@ exports.getUserErpMappings = async (req, res) => {
 exports.setUserErpMapping = async (req, res) => {
   try {
     const { userId } = req.params;
+    if (!(await verifyUserAccess(req, userId)))
+      return res.status(403).json({ success: false, message: 'Access denied' });
+
     const { portal_type, erp_entity_type, erp_entity_code, allowedsite, is_default } = req.body;
 
     if (!portal_type) return res.status(400).json({ success: false, message: "portal_type required" });
