@@ -99,11 +99,23 @@ exports.updateUser = async (userId, data) => {
     erp_entity_type, erp_entity_code, is_active
   } = data;
 
+  // COALESCE, not a blind overwrite: admin.controller.js's updateUser
+  // forwards req.body straight through, so any field the caller omits
+  // arrives here as `undefined` -> NULL over the wire. Previously that
+  // NULL'd the column outright (this is what wiped the on-premise admin's
+  // email/full_name/is_active during a role-only PUT). COALESCE keeps the
+  // existing value when the field wasn't part of this update, while a
+  // field the caller DID send (including explicit false for is_active)
+  // still applies normally.
   await pool.query(
     `UPDATE users SET
-       full_name = $1, email = $2, contact_number = $3,
-       whatsapp_number = $4, erp_entity_type = $5,
-       erp_entity_code = $6, is_active = $7
+       full_name = COALESCE($1, full_name),
+       email = COALESCE($2, email),
+       contact_number = COALESCE($3, contact_number),
+       whatsapp_number = COALESCE($4, whatsapp_number),
+       erp_entity_type = COALESCE($5, erp_entity_type),
+       erp_entity_code = COALESCE($6, erp_entity_code),
+       is_active = COALESCE($7, is_active)
      WHERE user_id = $8`,
     [full_name, email, contact_number, whatsapp_number,
      erp_entity_type, erp_entity_code, is_active, userId]
