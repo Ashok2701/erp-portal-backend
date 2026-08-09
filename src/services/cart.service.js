@@ -26,6 +26,24 @@ function resolveContext(req) {
       };
     }
 
+  // Consignment was missing entirely — any add-to-cart call made while on
+  // the Consignment portal fell through every branch below and hit the
+  // "Invalid role" throw, OR (depending on what the frontend sent) got
+  // silently treated as a plain customer cart. Either way, a multi-portal
+  // user's Customer-portal cart and Consignment-portal cart ended up as
+  // the exact same (actor_id, actor_type, party_id, party_type) row —
+  // items added on one portal appeared on the other. Consignment now gets
+  // its own actor_type/party_type, same pattern as customer/supplier.
+  if (party_type === 'CONSIGNMENT' || party_type === 'consignment') {
+    return {
+      actor_id: req.user?.user_id,
+      actor_type: 'consignment',
+      party_id: party_id,
+      party_type: party_type,
+      tenant_id : req.user?.tenant_id
+    };
+  }
+
   if (party_type === 'salesrep' || party_type === 'SALESREP') {
    // const party_id = req.body?.party_id || req.query?.party_id;
    // const party_type = req.body?.party_type || req.query?.party_type;
