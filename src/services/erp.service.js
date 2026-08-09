@@ -1,6 +1,25 @@
 const ERPFactory = require("../erp/erp.factory");
 const pricingEngine = require("../utils/pricing.engine");
 
+// Products + price lists change rarely (typically once per ERP sync), but
+// were being re-fetched from the ERP database — plus a full product-image
+// scan — on every single page load or refresh. A short in-memory TTL cache
+// per tenant+filter combo turns repeat navigations into an instant lookup
+// instead of a multi-second ERP round trip. TTL expiry is enough here;
+// there is no live "catalog changed" event to invalidate on, but
+// clearProductsCache() below is called whenever a tenant's ERP connection
+// settings change, so a reconfigured connection never serves stale data.
+const PRODUCTS_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const productsCache = new Map(); // `${tenant_id}::${filtersJSON}` -> { data, expiresAt }
+
+exports.clearProductsCache = (tenantId) => {
+  if (!tenantId) { productsCache.clear(); return; }
+  const prefix = `${tenantId}::`;
+  for (const key of productsCache.keys()) {
+    if (key.startsWith(prefix)) productsCache.delete(key);
+  }
+};
+
 exports.createSalesOrder = async (salesRequest) => {
   // 🔴 DEMO / MOCK IMPLEMENTATION
   // Later this will call Sage X3 API
@@ -33,6 +52,12 @@ exports.getSuppliers = async (user) => {
 
 exports.getProducts =
   async (filters, user) => {
+
+    const cacheKey = `${user.tenant_id}::${JSON.stringify(filters || {})}`;
+    const cached = productsCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.data;
+    }
 
     const adapter =
       await ERPFactory.getERPAdapterForUser(user);
@@ -102,6 +127,8 @@ exports.getProducts =
     console.timeEnd("MAP_PRODUCTS");
 
     console.timeEnd("TOTAL_PRODUCTS");
+
+    productsCache.set(cacheKey, { data: result, expiresAt: Date.now() + PRODUCTS_CACHE_TTL_MS });
 
     return result;
 };

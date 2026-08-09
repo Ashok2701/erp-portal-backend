@@ -67,18 +67,22 @@ exports.getAdminStats = async (user) => {
               AND created_at >= NOW()-INTERVAL '7 days'`, [tenant_id]),
   ]);
 
-  // ERP stats — race with 3s timeout
-  let products = [], categories = [];
+  // ERP stats — race with 3s timeout.
+  // Uses the lightweight getProductCount() (a single COUNT query) instead
+  // of getProducts({}), which used to pull the entire catalog PLUS every
+  // product image just to read .length — the single most expensive call
+  // on this page for a stat tile that only needs an integer.
+  let productCount = 0, categories = [];
   try {
     const timeout = new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000));
     const erpFetch = (async () => {
       const adapter = await ERPFactory.getERPAdapterForUser(user);
       return Promise.all([
-        adapter.getProducts({}).catch(() => []),
+        adapter.getProductCount().catch(() => 0),
         adapter.getProductCategories().catch(() => []),
       ]);
     })();
-    [products, categories] = await Promise.race([erpFetch, timeout]);
+    [productCount, categories] = await Promise.race([erpFetch, timeout]);
   } catch (_) {}
 
   const activityFeed = [];
@@ -118,7 +122,7 @@ exports.getAdminStats = async (user) => {
     modules:     { total: Number(modules.rows[0].total), active: Number(modules.rows[0].active) },
     roles:       { total: Number(roles.rows[0].total),   active: Number(roles.rows[0].active)   },
     role_modules:{ total: Number(roleModules.rows[0].count) },
-    products:    { total: products.length, categories: categories.length },
+    products:    { total: Number(productCount) || 0, categories: categories.length },
     orders: {
       total:   Number(ordersTotal.rows[0].count),
       today:   Number(ordersToday.rows[0].count),

@@ -244,24 +244,48 @@ class SageX3Adapter extends BaseERPAdapter {
 
     console.timeEnd("GET_PRODUCTS");
 
+    const rows = result.recordset;
+
+    // Only fetch images for the products this call is actually returning.
+    // CBLOB holds every product image in the whole ERP — pulling the entire
+    // table regardless of how many products matched (previously ~18MB of
+    // base64 on every request, even for a filtered/small result set) was
+    // the single biggest cost here. Scoping to just the returned PROD_CODEs
+    // cuts that to (usually) a fraction of the table.
     console.time("GET_PRODUCT_IMAGES");
 
-    const blobResult = await pool.request().query(`
-      SELECT IDENT1_0, BLOB_0 FROM LEWISB.CBLOB WHERE CODBLB_0 = 'ITM'
-    `);
+    const imageMap = new Map();
+    const prodCodes = [...new Set(rows.map(r => r.PROD_CODE))];
+
+    if (prodCodes.length) {
+      const CHUNK = 800; // stay well under SQL Server's ~2100 param limit
+      for (let i = 0; i < prodCodes.length; i += CHUNK) {
+        const chunk = prodCodes.slice(i, i + CHUNK);
+        const blobReq = pool.request();
+        const placeholders = chunk.map((code, idx) => {
+          const p = `img${i}_${idx}`;
+          blobReq.input(p, sql.VarChar, code);
+          return `@${p}`;
+        });
+
+        const blobResult = await blobReq.query(`
+          SELECT IDENT1_0, BLOB_0 FROM LEWISB.CBLOB
+          WHERE CODBLB_0 = 'ITM' AND IDENT1_0 IN (${placeholders.join(",")})
+        `);
+
+        for (const row of blobResult.recordset) {
+          const raw = row.BLOB_0;
+          const base64 = raw
+            ? (Buffer.isBuffer(raw) ? raw.toString("base64") : raw)
+            : null;
+          imageMap.set(row.IDENT1_0, base64);
+        }
+      }
+    }
 
     console.timeEnd("GET_PRODUCT_IMAGES");
 
-    const imageMap = new Map();
-    for (const row of blobResult.recordset) {
-      const raw = row.BLOB_0;
-      const base64 = raw
-        ? (Buffer.isBuffer(raw) ? raw.toString("base64") : raw)
-        : null;
-      imageMap.set(row.IDENT1_0, base64);
-    }
-
-    return result.recordset.map(row => ({
+    return rows.map(row => ({
       ...row,
       PROD_IMG: imageMap.get(row.PROD_CODE) ?? null
     }));
@@ -374,6 +398,22 @@ class SageX3Adapter extends BaseERPAdapter {
       `);
 
     return result.recordset;
+  }
+
+  // Lightweight product count for tiles/dashboards that only need the
+  // number, not the full catalog + every product image. Callers that used
+  // to call getProducts({}) just to read .length were paying for the full
+  // image-blob fetch (~18MB) for a single integer.
+  async getProductCount() {
+
+    const pool = await this.poolPromise;
+
+    const result =
+      await pool.request().query(`
+        SELECT COUNT(DISTINCT ITMREF_0) AS CNT FROM LEWISB.ITMMASTER
+      `);
+
+    return result.recordset[0]?.CNT ?? 0;
   }
 
   // =====================================================
@@ -865,35 +905,52 @@ class SageX3Adapter extends BaseERPAdapter {
     const result =
       await request.query(query);
 
-    for (const row of result.recordset) {
+    const orders = result.recordset;
 
-      const items =
-        await pool.request()
+    // Fetch line items for every order in ONE batched query instead of one
+    // ERP round trip per order (previously up to 100 sequential awaits for
+    // a 100-row page — the dominant cost of loading Orders). Same join
+    // logic as before, just parameterized over every SOHNUM_0 at once and
+    // grouped back onto each order in JS.
+    if (orders.length) {
 
-          .input(
-            "orderNo",
-            sql.NVarChar,
-            row.SOHNUM_0
-          )
+      const orderNumbers =
+        [...new Set(orders.map(o => o.SOHNUM_0))];
 
-          .query(`
-            SELECT
-              A.ITMREF_0,
-              C.ITMDES_0,
-              A.QTY_0,
-              C.NETPRIATI_0,
-              (A.QTY_0 * C.GROPRI_0) AS total_amount
-            FROM tbs.LEWISB.SORDERQ A
-            LEFT JOIN tbs.LEWISB.SORDERP C
-              ON A.SOHNUM_0 = C.SOHNUM_0
-            WHERE A.SOHNUM_0=@orderNo
-          `);
+      const itemsReq = pool.request();
 
-      row.items =
-        items.recordset;
+      const placeholders = orderNumbers.map((num, idx) => {
+        const p = `ord${idx}`;
+        itemsReq.input(p, sql.NVarChar, num);
+        return `@${p}`;
+      });
+
+      const itemsResult = await itemsReq.query(`
+        SELECT
+          A.SOHNUM_0,
+          A.ITMREF_0,
+          C.ITMDES_0,
+          A.QTY_0,
+          C.NETPRIATI_0,
+          (A.QTY_0 * C.GROPRI_0) AS total_amount
+        FROM tbs.LEWISB.SORDERQ A
+        LEFT JOIN tbs.LEWISB.SORDERP C
+          ON A.SOHNUM_0 = C.SOHNUM_0
+        WHERE A.SOHNUM_0 IN (${placeholders.join(",")})
+      `);
+
+      const itemsByOrder = new Map();
+      for (const row of itemsResult.recordset) {
+        if (!itemsByOrder.has(row.SOHNUM_0)) itemsByOrder.set(row.SOHNUM_0, []);
+        itemsByOrder.get(row.SOHNUM_0).push(row);
+      }
+
+      for (const order of orders) {
+        order.items = itemsByOrder.get(order.SOHNUM_0) || [];
+      }
     }
 
-    return result.recordset;
+    return orders;
   }
 
   async getOrderDetail(id, user) {

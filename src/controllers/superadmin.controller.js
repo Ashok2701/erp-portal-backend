@@ -3,6 +3,7 @@ const db                  = require("../config/db");
 const TenantSettingsModel = require("../models/tenantSettings.model");
 const ERPFactory          = require("../erp/erp.factory");
 const emailService        = require("../services/email.service");
+const erpService          = require("../services/erp.service");
 
 // ── LIST ALL TENANTS ─────────────────────────────────────────
 // ── HELPER: verify partner can access this tenant ────────────
@@ -247,6 +248,7 @@ exports.upsertSettings = async (req, res) => {
     // Clear adapter cache so next request gets fresh connection
     ERPFactory.clearAdapterCache(id);
     emailService.clearTransporterCache(id);
+    erpService.clearProductsCache(id);
 
     // Mask secrets before echoing back — getTenant() already does this, this
     // endpoint didn't, so a save request's own response leaked the plaintext
@@ -342,6 +344,7 @@ exports.testConnection = async (req, res) => {
     }
     const settings = await TenantSettingsModel.getTenantSettings(id);
     ERPFactory.clearAdapterCache(id);
+    erpService.clearProductsCache(id);
     const adapter = await ERPFactory.getERPAdapterForUser({ tenant_id: id });
     const sites = await adapter.getAllSites().catch(() => []);
     res.json({ success: true, message: "ERP connection successful", sites_count: sites.length });
