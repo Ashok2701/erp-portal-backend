@@ -66,7 +66,14 @@ exports.create = async (user, body) => {
 
 // ── GET ALL ───────────────────────────────────────────────────
 exports.getAll = async (user) => {
-  const isAdmin = user.role === "admin" || user.role === "Administrator";
+  // Case-insensitive/substring match — same heuristic as dashboard.service.js
+  // and assignAdmin(), since a tenant's admin role name isn't guaranteed to
+  // be spelled exactly "admin"/"Administrator". An exact-string miss here
+  // silently dropped admins into the supplier/self branch below, which
+  // returns only requests tied to their own supplier code or user_id —
+  // almost always empty for an admin account.
+  const isAdmin = String(user.role || '').toLowerCase().includes('admin')
+    || user.system_role === 'owner';
   let query, params;
 
   if (isAdmin) {

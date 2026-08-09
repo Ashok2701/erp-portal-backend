@@ -125,14 +125,20 @@ exports.create = async (user, body) => {
 };
 
 exports.getAll = async (user) => {
-  console.log("at service request - user details");
-  console.log(user);
-
-
   let query;
   let params = [];
 
-if (user.role === "Administrator") {
+  // Match by substring/case-insensitively, same heuristic used everywhere
+  // else in this codebase (dashboard.service.js admin count, assignAdmin())
+  // — a tenant's admin role can be spelled/cased differently per tenant
+  // (e.g. "Admin" vs "Administrator"), and an exact-string check here
+  // silently fell through to the per-user branch below, which only shows
+  // requests the admin personally submitted (almost always none) instead
+  // of every request waiting to be processed.
+  const isAdmin = String(user.role || '').toLowerCase().includes('admin')
+    || user.system_role === 'owner';
+
+  if (isAdmin) {
     // Admin gets all records
     query = `
       SELECT * FROM sales_requests
@@ -148,8 +154,8 @@ if (user.role === "Administrator") {
     params = [user.user_id];
   }
 
-   const result = await db.query(query, params);
-    return result.rows;
+  const result = await db.query(query, params);
+  return result.rows;
 };
 
 
